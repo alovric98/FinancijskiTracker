@@ -16,23 +16,11 @@ const MONTHS = ["Siječanj","Veljača","Ožujak","Travanj","Svibanj","Lipanj","S
 const fmt = (n) => new Intl.NumberFormat("hr-HR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
 // ---------------------------------------------------------------------------
-// localStorage helpers (replaces Claude artifact window.storage)
+// WordPress API endpoints (Nova logika)
 // ---------------------------------------------------------------------------
-const storage = {
-  get: (key) => {
-    try {
-      const val = localStorage.getItem(key);
-      return val ? { value: val } : null;
-    } catch {
-      return null;
-    }
-  },
-  set: (key, value) => {
-    try {
-      localStorage.setItem(key, value);
-    } catch {}
-  },
-};
+// Napomena: Ove rute će raditi jer će React kod biti ubačen unutar WordPressa
+const API_URL_GET = "/wp-json/financijski-tracker/v1/podaci";
+const API_URL_POST = "/wp-json/financijski-tracker/v1/spremi";
 // ---------------------------------------------------------------------------
 
 export default function App() {
@@ -40,7 +28,10 @@ export default function App() {
   const [month, setMonth] = useState(now.getMonth());
   const [year, setYear]   = useState(now.getFullYear());
   const [income, setIncome] = useState("");
-  const [expenses, setExpenses] = useState([]);
+  
+  // SVI troškovi iz baze (ne filtriramo ih po mjesecu ovdje jer u bazu spremamo sve)
+  const [allExpenses, setAllExpenses] = useState([]); 
+  
   const [tab, setTab] = useState("add");
   const [cat, setCat] = useState("hrana");
   const [amount, setAmount] = useState("");
@@ -56,21 +47,62 @@ export default function App() {
   const [note, setNote] = useState("");
   const [editNote, setEditNote] = useState("");
 
-  const key = `exp_${year}_${month}`;
+  // Ostavljamo key funkcionalnost za lakše filtriranje, ali podaci sada idu na server
+  const currentMonthKey = `${month + 1}.${year}`; 
 
+  // Filtriramo SVE troškove samo za odabrani mjesec i godinu kako bismo ih prikazali
+  const expenses = allExpenses.filter(e => {
+    // Pretpostavljamo da je datum u formatu "DD.MM.YYYY."
+    const parts = e.date.split('.');
+    if (parts.length >= 3) {
+      const eMonth = parseInt(parts[1], 10) - 1; // 0-based
+      const eYear = parseInt(parts[2], 10);
+      return eMonth === month && eYear === year;
+    }
+    return false;
+  });
+
+  // Učitavanje iz baze prilikom pokretanja
   useEffect(() => {
     setLoaded(false);
-    try {
-      const r = storage.get(key);
-      if (r) { const d = JSON.parse(r.value); setIncome(d.income || ""); setExpenses(d.expenses || []); }
-      else { setIncome(""); setExpenses([]); }
-    } catch { setIncome(""); setExpenses([]); }
-    setLoaded(true);
-  }, [key]);
+    fetch(API_URL_GET, {
+      method: "GET",
+      headers: {
+        'Content-Type': 'application/json',
+        // WordPress automatski prepoznaje ulogiranog korisnika preko cookieja 
+        // kada se REST API poziva s iste domene (tzv. Nonce autentifikacija)
+        'X-WP-Nonce': typeof wpApiSettings !== 'undefined' ? wpApiSettings.nonce : '' 
+      }
+    })
+    .then(res => res.json())
+    .then(data => {
+      setIncome(data.prihod || "");
+      setAllExpenses(data.entries || []);
+      setLoaded(true);
+    })
+    .catch(err => {
+      console.error("Greška pri dohvaćanju iz baze:", err);
+      // Fallback ako ne uspije (npr. testiranje izvan WP-a)
+      setIncome("");
+      setAllExpenses([]);
+      setLoaded(true);
+    });
+  }, []);
 
+  // Funkcija za spremanje promjena u bazu
   const persist = useCallback((inc, exps) => {
-    storage.set(key, JSON.stringify({ income: inc, expenses: exps }));
-  }, [key]);
+    fetch(API_URL_POST, {
+      method: "POST",
+      headers: {
+        'Content-Type': 'application/json',
+        'X-WP-Nonce': typeof wpApiSettings !== 'undefined' ? wpApiSettings.nonce : ''
+      },
+      body: JSON.stringify({ prihod: inc, entries: exps })
+    })
+    .then(res => res.json())
+    .then(data => console.log("Spremljeno na server:", data))
+    .catch(err => console.error("Greška pri spremanju:", err));
+  }, []);
 
   const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 1800); };
 
@@ -78,19 +110,32 @@ export default function App() {
     const val = parseFloat(amount);
     if (!val || val <= 0) return;
     const trimmedNote = note.trim();
-    const e = { id: Date.now(), category: cat, amount: val, date: new Date().toLocaleDateString("hr-HR"), ...(trimmedNote && { note: trimmedNote }) };
-    const next = [e, ...expenses];
-    setExpenses(next); persist(income, next);
-    setAmount(""); setNote(""); flash("Dodano ✓");
+    // Spremanje datuma (format mora biti DD.MM.YYYY. zbog filtera iznad)
+    const newDate = new Date();
+    const formattedDate = `${newDate.getDate()}.${newDate.getMonth() + 1}.${newDate.getFullYear()}.`;
+    
+    const e = { id: Date.now(), category: cat, amount: val, date: formattedDate, ...(trimmedNote && { note: trimmedNote }) };
+    const next = [e, ...allExpenses];
+    
+    setAllExpenses(next); 
+    persist(income, next);
+    setAmount(""); 
+    setNote(""); 
+    flash("Dodano ✓");
     setTab("pregled");
   };
 
   const remove = (id) => {
-    const next = expenses.filter(e => e.id !== id);
-    setExpenses(next); persist(income, next); setConfirmId(null);
+    const next = allExpenses.filter(e => e.id !== id);
+    setAllExpenses(next); 
+    persist(income, next); 
+    setConfirmId(null);
   };
 
-  const saveIncome = (v) => { setIncome(v); persist(v, expenses); };
+  const saveIncome = (v) => { 
+    setIncome(v); 
+    persist(v, allExpenses); 
+  };
 
   const openEdit = (e) => {
     setEditItem(e);
@@ -103,9 +148,11 @@ export default function App() {
     const val = parseFloat(editAmt);
     if (!val || val <= 0) return;
     const trimmedNote = editNote.trim();
-    const next = expenses.map(e => e.id === editItem.id ? { ...e, amount: val, category: editCat, ...(trimmedNote ? { note: trimmedNote } : { note: undefined }) } : e);
-    setExpenses(next); persist(income, next);
-    setEditItem(null); flash("Spremljeno ✓");
+    const next = allExpenses.map(e => e.id === editItem.id ? { ...e, amount: val, category: editCat, ...(trimmedNote ? { note: trimmedNote } : { note: undefined }) } : e);
+    setAllExpenses(next); 
+    persist(income, next);
+    setEditItem(null); 
+    flash("Spremljeno ✓");
   };
 
   const total = expenses.reduce((s, e) => s + e.amount, 0);
@@ -118,11 +165,9 @@ export default function App() {
     .filter(c => c.sum > 0).sort((a, b) => b.sum - a.sum);
 
   const prevM = () => {
-    persist(income, expenses);
     if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1);
   };
   const nextM = () => {
-    persist(income, expenses);
     if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1);
   };
 
@@ -261,7 +306,7 @@ export default function App() {
     <div className="root">
       <style>{css}</style>
       <div className="empty" style={{ paddingTop: '40vh' }}>
-        <div style={{ fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: '#ABABAB' }}>Učitavanje…</div>
+        <div style={{ fontSize: 12, letterSpacing: 1, textTransform: 'uppercase', color: '#ABABAB' }}>Učitavanje podataka...</div>
       </div>
     </div>
   );
