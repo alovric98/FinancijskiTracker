@@ -18,9 +18,11 @@ body {
   max-width: 420px;
   margin: 0 auto;
   min-height: 100vh;
-  background: transparent;
+  background: var(--color-app-bg);
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
 }
 
 /* ── Header ─────────────────────────────────────────────── */
@@ -245,7 +247,7 @@ body {
 
 /* ── Content Area ───────────────────────────────────────── */
 .content {
-  padding: 24px 28px max(100px, calc(80px + env(safe-area-inset-bottom, 0px)));
+  padding: 24px 28px 8px;
   flex: 1;
 }
 
@@ -608,7 +610,7 @@ body {
 /* ── Toast ──────────────────────────────────────────────── */
 .toast {
   position: fixed;
-  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  bottom: 32px;
   left: 50%;
   transform: translateX(-50%);
   background: var(--color-accent);
@@ -792,16 +794,8 @@ body {
 
 /* ── Save Bar ───────────────────────────────────────────── */
 .save-bar {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 420px;
-  padding: 12px 28px max(20px, calc(16px + env(safe-area-inset-bottom, 0px)));
-  background: linear-gradient(to top, var(--color-app-bg) 65%, transparent);
-  z-index: 50;
-  pointer-events: none;
+  padding: 4px 28px max(24px, calc(20px + env(safe-area-inset-bottom, 0px)));
+  margin-top: auto;
 }
 
 .save-btn {
@@ -817,7 +811,6 @@ body {
   letter-spacing: 1px;
   text-transform: uppercase;
   cursor: pointer;
-  pointer-events: all;
   transition: background .2s ease, box-shadow .2s ease, transform .15s ease;
   box-shadow: 0 4px 24px rgba(246, 199, 30, 0.30);
 }
