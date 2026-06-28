@@ -1,4 +1,12 @@
-:root {
+/*
+ * Varijable se deklariraju i na #wb-finance-tracker / #root (ID specifičnost),
+ * ne samo na :root. Razlog: WordPress tema (Wealth Builder) definira generičke
+ * nazive kao --color-surface-1/2 na svom :root i prepisala bi naše vrijednosti
+ * (kartice bi postale bijele). ID selektor pobjeđuje temin :root unutar app-a.
+ */
+:root,
+#wb-finance-tracker,
+#root {
   /* ── Brand Palette ─────────────────────────────────────── */
   --color-primary:       #001234;
   --color-primary-dark:  #09214E;
