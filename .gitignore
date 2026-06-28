@@ -2,3 +2,7 @@ node_modules
 dist
 .DS_Store
 *.local
+.claude
+# stari buildovi (novi bundle je index.js)
+index-*.js
+index-v2-final.js
