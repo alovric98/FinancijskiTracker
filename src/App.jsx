@@ -123,6 +123,7 @@ export default function App() {
   const [editCat, setEditCat] = useState("");
   const [note, setNote] = useState("");
   const [editNote, setEditNote] = useState("");
+  const [toastType, setToastType] = useState("success"); // 'success' | 'warn'
   const toastTimer = useRef(null);
   const fadeTimer  = useRef(null);
 
@@ -136,10 +137,11 @@ export default function App() {
     return false;
   });
 
-  const flash = (msg, duration = 1800) => {
+  const flash = (msg, duration = 1800, type = "success") => {
     clearTimeout(toastTimer.current);
     clearTimeout(fadeTimer.current);
     setToast(msg);
+    setToastType(type);
     setToastFading(false);
     toastTimer.current = setTimeout(() => {
       setToastFading(true);
@@ -155,6 +157,11 @@ export default function App() {
   const addExpense = () => {
     const val = parseFloat(amount);
     if (!val || val <= 0) return;
+    if ((parseFloat(income) || 0) <= 0) {
+      flash("Najprije unesite prihod", 2200, "warn");
+      setIncomeEditing(true);
+      return;
+    }
     const trimmedNote = note.trim();
     const newDate = new Date();
     const formattedDate = `${newDate.getDate()}.${newDate.getMonth() + 1}.${newDate.getFullYear()}.`;
@@ -465,7 +472,7 @@ export default function App() {
         <button className="save-btn" onClick={handleSave}>Spremi</button>
       </div>
 
-      {toast && <div className={`toast${toastFading ? ' fading' : ''}`}>{toast}</div>}
+      {toast && <div className={`toast ${toastType}${toastFading ? ' fading' : ''}`}>{toast}</div>}
 
       {confirmId && (
         <div className="overlay" onClick={() => setConfirmId(null)}>
