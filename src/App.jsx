@@ -214,9 +214,9 @@ export default function App() {
     if (!active || !payload?.length) return null;
     const d = payload[0].payload;
     return (
-      <div style={{ background: 'var(--color-surface-2)', borderRadius: 10, padding: '8px 14px', border: '1px solid var(--color-glass-border-md)' }}>
-        <div style={{ color: 'var(--color-on-dark-subtle)', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 }}>{d.label}</div>
-        <div style={{ color: 'var(--color-on-dark)', fontSize: 16, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>{fmt(d.sum)} €</div>
+      <div style={{ background: 'var(--ft-color-surface-2)', borderRadius: 10, padding: '8px 14px', border: '1px solid var(--ft-color-glass-border-md)' }}>
+        <div style={{ color: 'var(--ft-color-on-dark-subtle)', fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 }}>{d.label}</div>
+        <div style={{ color: 'var(--ft-color-on-dark)', fontSize: 16, fontFamily: 'var(--font-heading)', fontWeight: 700 }}>{fmt(d.sum)} €</div>
       </div>
     );
   };
@@ -267,7 +267,7 @@ export default function App() {
           <div className="stat-num">{fmt(total)}<span className="stat-curr"> €</span></div>
           {inc > 0 && (
             <div className="bar-track">
-              <div className="bar-fill" style={{ width: `${spentPct}%`, background: 'var(--color-accent)', opacity: 0.85 }} />
+              <div className="bar-fill" style={{ width: `${spentPct}%`, background: 'var(--ft-color-accent)', opacity: 0.85 }} />
             </div>
           )}
         </div>
@@ -301,7 +301,7 @@ export default function App() {
                   <CategoryIcon
                     id={c.id}
                     size={22}
-                    color={cat === c.id ? 'var(--color-primary)' : 'var(--color-accent)'}
+                    color={cat === c.id ? 'var(--ft-color-primary)' : 'var(--ft-color-accent)'}
                     strokeWidth={1.5}
                   />
                   <span className="cbt-lbl">{c.label}</span>
@@ -351,7 +351,7 @@ export default function App() {
                 <div>
                   <div className="tb-lbl">Najviše trošiš na</div>
                   <div className="tb-val" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <CategoryIcon id={byCat[0].id} size={18} color="var(--color-accent)" strokeWidth={1.5} />
+                    <CategoryIcon id={byCat[0].id} size={18} color="var(--ft-color-accent)" strokeWidth={1.5} />
                     {byCat[0].label}
                   </div>
                 </div>
@@ -492,7 +492,7 @@ export default function App() {
                   <CategoryIcon
                     id={c.id}
                     size={22}
-                    color={editCat === c.id ? 'var(--color-primary)' : 'var(--color-accent)'}
+                    color={editCat === c.id ? 'var(--ft-color-primary)' : 'var(--ft-color-accent)'}
                     strokeWidth={1.5}
                   />
                   <span className="cbt-lbl">{c.label}</span>

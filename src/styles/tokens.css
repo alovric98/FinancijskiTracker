@@ -1,38 +1,38 @@
 /*
  * Varijable se deklariraju i na #wb-finance-tracker / #root (ID specifičnost),
  * ne samo na :root. Razlog: WordPress tema (Wealth Builder) definira generičke
- * nazive kao --color-surface-1/2 na svom :root i prepisala bi naše vrijednosti
+ * nazive kao --ft-color-surface-1/2 na svom :root i prepisala bi naše vrijednosti
  * (kartice bi postale bijele). ID selektor pobjeđuje temin :root unutar app-a.
  */
 :root,
 #wb-finance-tracker,
 #root {
   /* ── Brand Palette ─────────────────────────────────────── */
-  --color-primary:       #001234;
-  --color-primary-dark:  #09214E;
-  --color-secondary:     #1EEEF6;
-  --color-accent:        #F6C71E;
-  --color-accent-hover:  #E59000;
+  --ft-color-primary:       #001234;
+  --ft-color-primary-dark:  #09214E;
+  --ft-color-secondary:     #1EEEF6;
+  --ft-color-accent:        #F6C71E;
+  --ft-color-accent-hover:  #E59000;
 
   /* ── Text ──────────────────────────────────────────────── */
-  --color-text:          #373737;
-  --color-text-muted:    #334155;
-  --color-text-subtle:   #94A3B8;
+  --ft-color-text:          #373737;
+  --ft-color-text-muted:    #334155;
+  --ft-color-text-subtle:   #94A3B8;
 
   /* ── Surfaces ──────────────────────────────────────────── */
-  --color-white:         #FFFFFF;
-  --color-surface:       #FFFFFF;
-  --color-surface-light: #F0F5FA;
-  --color-border:        #D1D5DB;
-  --color-border-light:  #E2E8F0;
+  --ft-color-white:         #FFFFFF;
+  --ft-color-surface:       #FFFFFF;
+  --ft-color-surface-light: #F0F5FA;
+  --ft-color-border:        #D1D5DB;
+  --ft-color-border-light:  #E2E8F0;
 
   /* ── Semantic ──────────────────────────────────────────── */
-  --color-success:       #27AE60;
-  --color-danger:        #C0392B;
-  --color-danger-bg:     #FEF0F4;
-  --color-danger-active: #FCD9E3;
-  --color-info-bg:       #EEF4F8;
-  --color-info-active:   #D8EAF4;
+  --ft-color-success:       #27AE60;
+  --ft-color-danger:        #C0392B;
+  --ft-color-danger-bg:     #FEF0F4;
+  --ft-color-danger-active: #FCD9E3;
+  --ft-color-info-bg:       #EEF4F8;
+  --ft-color-info-active:   #D8EAF4;
 
   /* ── Typography ────────────────────────────────────────── */
   --font-heading: 'Poppins', sans-serif;
@@ -52,16 +52,16 @@
   --shadow-elevated: 0 4px 16px rgba(0, 18, 52, 0.12);
 
   /* ── Dark Surfaces (WB-matched dark theme) ───────────────── */
-  --color-app-bg:          #001234;
-  --color-surface-1:       #071D3F;
-  --color-surface-2:       #0E2650;
-  --color-glass-border:    rgba(255, 255, 255, 0.09);
-  --color-glass-border-md: rgba(255, 255, 255, 0.14);
+  --ft-color-app-bg:          #001234;
+  --ft-color-surface-1:       #071D3F;
+  --ft-color-surface-2:       #0E2650;
+  --ft-color-glass-border:    rgba(255, 255, 255, 0.09);
+  --ft-color-glass-border-md: rgba(255, 255, 255, 0.14);
 
   /* ── Text on Dark ─────────────────────────────────────────── */
-  --color-on-dark:         #FFFFFF;
-  --color-on-dark-muted:   rgba(255, 255, 255, 0.58);
-  --color-on-dark-subtle:  rgba(255, 255, 255, 0.28);
+  --ft-color-on-dark:         #FFFFFF;
+  --ft-color-on-dark-muted:   rgba(255, 255, 255, 0.58);
+  --ft-color-on-dark-subtle:  rgba(255, 255, 255, 0.28);
 
   /* ── Transitions ─────────────────────────────────────────── */
   --transition-fast:   all 0.15s ease;
