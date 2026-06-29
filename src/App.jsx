@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Sector } from "recharts";
 
 const CategoryIcon = ({ id, size = 20, color = "currentColor", strokeWidth = 1.5 }) => {
@@ -124,8 +124,15 @@ export default function App() {
   const [note, setNote] = useState("");
   const [editNote, setEditNote] = useState("");
   const [toastType, setToastType] = useState("success"); // 'success' | 'warn'
+  const [loaded, setLoaded] = useState(false);
   const toastTimer = useRef(null);
   const fadeTimer  = useRef(null);
+  const persistTimer = useRef(null);
+  const skipPersist = useRef(true);
+
+  // WordPress ubaci window.ftSettings = { nonce, root } (vidi PHP snippet).
+  // Ako ga nema (lokalni dev / izvan WP-a), app radi in-memory bez spremanja.
+  const settings = (typeof window !== "undefined" && window.ftSettings) || null;
 
   const expenses = allExpenses.filter(e => {
     const parts = e.date.split('.');
@@ -152,7 +159,49 @@ export default function App() {
     }, duration);
   };
 
-  const handleSave = () => flash("Vaše promjene su uspješno pohranjene", 2500);
+  // ── Backend: per-user učitavanje + autosave preko WordPress REST API-ja ────
+  const persist = useCallback((prihod, entries) => {
+    if (!settings || !settings.root) return; // nema WP-a → preskoči (dev)
+    fetch(settings.root + "spremi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-WP-Nonce": settings.nonce },
+      credentials: "same-origin",
+      body: JSON.stringify({ prihod, entries }),
+    }).catch(() => {});
+  }, [settings]);
+
+  // Početno učitavanje korisnikovih podataka (jednom)
+  useEffect(() => {
+    if (!settings || !settings.root) { setLoaded(true); return; }
+    fetch(settings.root + "podaci", {
+      headers: { "X-WP-Nonce": settings.nonce },
+      credentials: "same-origin",
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (d && typeof d === "object") {
+          setIncome(d.prihod || "");
+          setAllExpenses(Array.isArray(d.entries) ? d.entries : []);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, [settings]);
+
+  // Autosave (debounce 700ms) — tek NAKON početnog učitavanja, da ne prebriše
+  // korisnikove podatke praznim stanjem prije nego stignu s servera.
+  useEffect(() => {
+    if (!loaded) return;
+    if (skipPersist.current) { skipPersist.current = false; return; }
+    clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => persist(income, allExpenses), 700);
+    return () => clearTimeout(persistTimer.current);
+  }, [income, allExpenses, loaded, persist]);
+
+  const handleSave = () => {
+    persist(income, allExpenses);
+    flash("Vaše promjene su uspješno pohranjene", 2500);
+  };
 
   const addExpense = () => {
     const val = parseFloat(amount);
