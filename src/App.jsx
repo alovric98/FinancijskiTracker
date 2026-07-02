@@ -107,7 +107,7 @@ export default function App() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth());
   const [year, setYear]   = useState(now.getFullYear());
-  const [incomes, setIncomes] = useState({}); // { "M.YYYY": "1500", ... } — prihod PO mjesecu
+  const [incomeEntries, setIncomeEntries] = useState([]); // lista prihoda (kao troškovi), filtrira se po mjesecu
   const [allExpenses, setAllExpenses] = useState([]);
   const [tab, setTab] = useState("add");
   const [cat, setCat] = useState("hrana");
@@ -115,7 +115,9 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [toastFading, setToastFading] = useState(false);
   const [confirmId, setConfirmId] = useState(null);
-  const [incomeEditing, setIncomeEditing] = useState(false);
+  const [incomeSheet, setIncomeSheet] = useState(false);
+  const [newIncomeAmt, setNewIncomeAmt] = useState("");
+  const [newIncomeNote, setNewIncomeNote] = useState("");
   const [expandedCat, setExpandedCat] = useState(null);
   const [editItem, setEditItem] = useState(null);
   const [activeSlice, setActiveSlice] = useState(null);
@@ -134,19 +136,26 @@ export default function App() {
   // Ako ga nema (lokalni dev / izvan WP-a), app radi in-memory bez spremanja.
   const settings = (typeof window !== "undefined" && window.ftSettings) || null;
 
-  // Prihod je vezan uz TRENUTNO odabrani mjesec (svaki mjesec ima svoj).
-  const monthKey = `${month + 1}.${year}`;
-  const income = incomes[monthKey] || "";
+  // Filter po trenutno odabranom mjesecu/godini (i za troškove i za prihode).
+  const inMonth = (e) => {
+    const parts = (e.date || "").split(".");
+    return parts.length >= 3 &&
+      parseInt(parts[1], 10) - 1 === month &&
+      parseInt(parts[2], 10) === year;
+  };
 
-  const expenses = allExpenses.filter(e => {
-    const parts = e.date.split('.');
-    if (parts.length >= 3) {
-      const eMonth = parseInt(parts[1], 10) - 1;
-      const eYear = parseInt(parts[2], 10);
-      return eMonth === month && eYear === year;
-    }
-    return false;
-  });
+  const expenses = allExpenses.filter(inMonth);
+  const monthIncome = incomeEntries.filter(inMonth);
+
+  // Datum unosa unutar ODABRANOG mjeseca (današnji dan ako gledaš tekući mjesec,
+  // inače dan clampan na zadnji dan tog mjeseca).
+  const dateInSelectedMonth = () => {
+    const today = new Date();
+    const isCurrentView = month === today.getMonth() && year === today.getFullYear();
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const day = isCurrentView ? today.getDate() : Math.min(today.getDate(), lastDay);
+    return `${day}.${month + 1}.${year}.`;
+  };
 
   const flash = (msg, duration = 1800, type = "success") => {
     clearTimeout(toastTimer.current);
@@ -164,13 +173,13 @@ export default function App() {
   };
 
   // ── Backend: per-user učitavanje + autosave preko WordPress REST API-ja ────
-  const persist = useCallback((prihodi, entries) => {
+  const persist = useCallback((incEntries, entries) => {
     if (!settings || !settings.root) return; // nema WP-a → preskoči (dev)
     fetch(settings.root + "spremi", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-WP-Nonce": settings.nonce },
       credentials: "same-origin",
-      body: JSON.stringify({ prihodi, entries }),
+      body: JSON.stringify({ incomeEntries: incEntries, entries }),
     }).catch(() => {});
   }, [settings]);
 
@@ -184,11 +193,20 @@ export default function App() {
       .then(r => r.json())
       .then(d => {
         if (d && typeof d === "object") {
-          if (d.prihodi && typeof d.prihodi === "object") {
-            setIncomes(d.prihodi);
-          } else if (d.prihod) {
-            // migracija stare GLOBALNE vrijednosti → veže se na trenutni mjesec
-            setIncomes({ [`${now.getMonth() + 1}.${now.getFullYear()}`]: d.prihod });
+          if (Array.isArray(d.incomeEntries)) {
+            setIncomeEntries(d.incomeEntries);
+          } else if (d.prihodi && typeof d.prihodi === "object") {
+            // migracija v1.3 mape {mjesec: iznos} → lista prihoda
+            const conv = Object.entries(d.prihodi)
+              .filter(([, v]) => parseFloat(v) > 0)
+              .map(([k, v], i) => {
+                const [m, y] = k.split(".");
+                return { id: Date.now() + i, amount: parseFloat(v), date: `1.${m}.${y}.` };
+              });
+            setIncomeEntries(conv);
+          } else if (d.prihod && parseFloat(d.prihod) > 0) {
+            // migracija najstarije globalne vrijednosti → trenutni mjesec
+            setIncomeEntries([{ id: Date.now(), amount: parseFloat(d.prihod), date: `1.${now.getMonth() + 1}.${now.getFullYear()}.` }]);
           }
           setAllExpenses(Array.isArray(d.entries) ? d.entries : []);
         }
@@ -203,32 +221,25 @@ export default function App() {
     if (!loaded) return;
     if (skipPersist.current) { skipPersist.current = false; return; }
     clearTimeout(persistTimer.current);
-    persistTimer.current = setTimeout(() => persist(incomes, allExpenses), 700);
+    persistTimer.current = setTimeout(() => persist(incomeEntries, allExpenses), 700);
     return () => clearTimeout(persistTimer.current);
-  }, [incomes, allExpenses, loaded, persist]);
+  }, [incomeEntries, allExpenses, loaded, persist]);
 
   const handleSave = () => {
-    persist(incomes, allExpenses);
+    persist(incomeEntries, allExpenses);
     flash("Vaše promjene su uspješno pohranjene", 2500);
   };
 
   const addExpense = () => {
     const val = parseFloat(amount);
     if (!val || val <= 0) return;
-    if ((parseFloat(income) || 0) <= 0) {
+    if (inc <= 0) {
       flash("Najprije unesite prihod", 2200, "warn");
-      setIncomeEditing(true);
+      setIncomeSheet(true);
       return;
     }
     const trimmedNote = note.trim();
-    // Trošak dobiva datum ODABRANOG mjeseca (ne nužno današnjeg). Ako gledaš
-    // trenutni mjesec → današnji dan; inače dan (clampan na zadnji dan mjeseca).
-    const today = new Date();
-    const isCurrentView = month === today.getMonth() && year === today.getFullYear();
-    const lastDay = new Date(year, month + 1, 0).getDate();
-    const day = isCurrentView ? today.getDate() : Math.min(today.getDate(), lastDay);
-    const formattedDate = `${day}.${month + 1}.${year}.`;
-    const e = { id: Date.now(), category: cat, amount: val, date: formattedDate, ...(trimmedNote && { note: trimmedNote }) };
+    const e = { id: Date.now(), category: cat, amount: val, date: dateInSelectedMonth(), ...(trimmedNote && { note: trimmedNote }) };
     const next = [e, ...allExpenses];
     setAllExpenses(next);
     setAmount("");
@@ -243,9 +254,19 @@ export default function App() {
     setConfirmId(null);
   };
 
-  const saveIncome = (v) => {
-    // Sprema prihod SAMO za trenutno odabrani mjesec.
-    setIncomes(prev => ({ ...prev, [monthKey]: v }));
+  const addIncome = () => {
+    const val = parseFloat(newIncomeAmt);
+    if (!val || val <= 0) return;
+    const trimmedNote = newIncomeNote.trim();
+    const e = { id: Date.now(), amount: val, date: dateInSelectedMonth(), ...(trimmedNote && { note: trimmedNote }) };
+    setIncomeEntries(prev => [e, ...prev]);
+    setNewIncomeAmt("");
+    setNewIncomeNote("");
+    flash("Prihod dodan ✓");
+  };
+
+  const removeIncome = (id) => {
+    setIncomeEntries(prev => prev.filter(e => e.id !== id));
   };
 
   const openEdit = (e) => {
@@ -266,7 +287,7 @@ export default function App() {
   };
 
   const total = expenses.reduce((s, e) => s + e.amount, 0);
-  const inc   = parseFloat(income) || 0;
+  const inc   = monthIncome.reduce((s, e) => s + e.amount, 0);
   const left  = inc > 0 ? inc - total : null;
   const spentPct = inc > 0 ? Math.min(100, (total / inc) * 100) : 0;
 
@@ -274,10 +295,13 @@ export default function App() {
     .map(c => ({ ...c, sum: expenses.filter(e => e.category === c.id).reduce((s, e) => s + e.amount, 0) }))
     .filter(c => c.sum > 0).sort((a, b) => b.sum - a.sum);
 
+  // Zabrana budućih mjeseci: naprijed se može samo do tekućeg mjeseca.
+  const canGoNext = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth());
   const prevM = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1);
   };
   const nextM = () => {
+    if (!canGoNext) return;
     if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1);
   };
 
@@ -304,31 +328,16 @@ export default function App() {
           <div className="mnav">
             <button className="marr" onClick={prevM}>‹</button>
             <div className="mlbl">{MONTHS[month].slice(0, 3)} {year}</div>
-            <button className="marr" onClick={nextM}>›</button>
+            <button className="marr" onClick={nextM} disabled={!canGoNext} title={!canGoNext ? "Ne može se unositi za buduće mjesece" : ""}>›</button>
           </div>
         </div>
 
         <div className="inc-strip">
           <div className="inc-lbl">Prihodi</div>
-          {incomeEditing ? (
-            <input
-              className="inc-input"
-              autoFocus
-              type="number"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={income}
-              onChange={e => saveIncome(e.target.value)}
-              onBlur={() => setIncomeEditing(false)}
-            />
-          ) : (
-            <div className="inc-trigger" onClick={() => setIncomeEditing(true)}>
-              {income
-                ? <>{fmt(parseFloat(income))} €<span className="inc-edit-ico">✎</span></>
-                : <span className="inc-add">+ Dodaj prihod</span>
-              }
-            </div>
-          )}
+          <div className="inc-right">
+            {inc > 0 && <span className="inc-total">{fmt(inc)} €</span>}
+            <button className="inc-add-btn" onClick={() => setIncomeSheet(true)}>+ Dodaj prihod</button>
+          </div>
         </div>
       </div>
 
@@ -535,6 +544,63 @@ export default function App() {
       <div className="save-bar">
         <button className="save-btn" onClick={handleSave}>Spremi</button>
       </div>
+
+      {incomeSheet && (
+        <div className="overlay" onClick={() => setIncomeSheet(false)}>
+          <div className="edit-sheet" onClick={e => e.stopPropagation()}>
+            <div className="edit-handle" />
+            <div className="edit-title">Prihodi — {MONTHS[month]} {year}</div>
+
+            <div className="edit-lbl">Novi prihod</div>
+            <div className="edit-amt-row">
+              <span className="amt-sym">€</span>
+              <input
+                className="amt-inp"
+                type="number"
+                inputMode="decimal"
+                placeholder="0.00"
+                autoFocus
+                value={newIncomeAmt}
+                onChange={e => setNewIncomeAmt(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addIncome()}
+              />
+            </div>
+            <div className="edit-note-row">
+              <span className="note-ico">✎</span>
+              <input
+                className="note-inp"
+                type="text"
+                placeholder="Opis  (npr. Plaća, Honorar…)"
+                value={newIncomeNote}
+                onChange={e => setNewIncomeNote(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addIncome()}
+                maxLength={40}
+              />
+            </div>
+            <button className="edit-save" onClick={addIncome} disabled={!newIncomeAmt || parseFloat(newIncomeAmt) <= 0}>
+              + Dodaj prihod
+            </button>
+
+            {monthIncome.length > 0 && (
+              <div className="inc-list">
+                {monthIncome.map(e => (
+                  <div key={e.id} className="inc-item">
+                    <div className="inc-item-info">
+                      <div className="inc-item-amt">{fmt(e.amount)} €</div>
+                      {e.note && <div className="inc-item-note">{e.note}</div>}
+                    </div>
+                    <button className="inc-item-del" onClick={() => removeIncome(e.id)} title="Obriši">✕</button>
+                  </div>
+                ))}
+                <div className="inc-total-row">
+                  <span>Ukupno</span>
+                  <span>{fmt(inc)} €</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {toast && <div className={`toast ${toastType}${toastFading ? ' fading' : ''}`}>{toast}</div>}
 
