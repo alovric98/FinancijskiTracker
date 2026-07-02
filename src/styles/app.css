@@ -99,6 +99,7 @@ body {
   align-items: center;
   justify-content: space-between;
   border: 1px solid rgba(246, 199, 30, 0.22);
+  position: relative;
 }
 
 .inc-lbl {
@@ -184,66 +185,113 @@ body {
 }
 .inc-add-btn:hover { background: rgba(246, 199, 30, 0.20); border-color: rgba(246, 199, 30, 0.55); }
 .inc-add-btn:active { transform: scale(.96); }
+.inc-add-btn.active { background: rgba(246, 199, 30, 0.24); border-color: rgba(246, 199, 30, 0.65); color: var(--ft-color-accent); }
 
-/* Lista prihoda u modalu */
-.inc-list { margin-top: 22px; display: flex; flex-direction: column; gap: 8px; }
-.inc-item {
+/* ── Prihod popover (kompaktan, uz gumb, animiran) ──────── */
+.inc-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 250px;
+  max-width: calc(100vw - 40px);
+  background: var(--ft-color-surface-2);
+  border: 1px solid var(--ft-color-glass-border-md);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px) scale(0.95);
+  transform-origin: top right;
+  transition: opacity .18s ease, transform .2s cubic-bezier(0.22, 1, 0.36, 1), visibility .2s;
+}
+.inc-pop.open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+.inc-pop-row {
   display: flex;
   align-items: center;
-  gap: 10px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--ft-color-glass-border);
   border-radius: var(--radius-md);
-  padding: 12px 14px;
+  padding: 0 12px;
+  transition: border-color .2s;
 }
-.inc-item-info { flex: 1; min-width: 0; }
-.inc-item-amt { font-family: var(--font-heading); font-size: 16px; font-weight: 600; color: var(--ft-color-on-dark); }
-.inc-item-note { font-size: 11px; color: var(--ft-color-on-dark-muted); margin-top: 2px; }
-.inc-item-del {
-  background: none;
+.inc-pop-row:focus-within { border-color: rgba(246, 199, 30, 0.5); }
+.inc-pop-sym { font-size: 16px; color: var(--ft-color-on-dark-subtle); padding-right: 6px; }
+.inc-pop-amt {
+  flex: 1;
   border: none;
-  color: var(--ft-color-on-dark-subtle);
-  cursor: pointer;
-  font-size: 14px;
-  min-width: 36px;
-  min-height: 36px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: var(--transition-fast);
-  flex-shrink: 0;
-}
-.inc-item-del:hover  { color: #FF6B6B; background: rgba(255, 107, 107, 0.12); }
-.inc-item-del:active { color: #FF6B6B; background: rgba(255, 107, 107, 0.20); }
-.inc-total-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 6px;
-  padding: 13px 14px 2px;
-  border-top: 1px solid var(--ft-color-glass-border);
+  outline: none;
+  background: none;
   font-family: var(--font-heading);
+  font-size: 20px;
   font-weight: 700;
-  font-size: 15px;
   color: var(--ft-color-on-dark);
+  padding: 10px 0;
+  width: 100%;
 }
-.inc-total-row span:first-child {
+.inc-pop-amt::placeholder { color: var(--ft-color-on-dark-subtle); }
+.inc-pop-note {
+  border: 1px solid var(--ft-color-glass-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 9px 12px;
   font-family: var(--font-body);
-  font-size: 11px;
-  letter-spacing: 1.5px;
+  font-size: 12.5px;
+  color: var(--ft-color-on-dark-muted);
+  outline: none;
+  width: 100%;
+}
+.inc-pop-note::placeholder { color: var(--ft-color-on-dark-subtle); }
+.inc-pop-note:focus { border-color: var(--ft-color-glass-border-md); }
+.inc-pop-btn {
+  background: var(--ft-color-accent);
+  color: var(--ft-color-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 11px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
-  color: var(--ft-color-on-dark-subtle);
-  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s ease, transform .15s ease;
 }
+.inc-pop-btn:hover  { background: var(--ft-color-accent-hover); }
+.inc-pop-btn:active { transform: scale(.97); }
+.inc-pop-btn:disabled { opacity: 0.45; pointer-events: none; }
 
-/* Disabled stanje za spremi/dodaj u modalu */
-.edit-save:disabled {
-  opacity: 0.45;
-  cursor: default;
-  pointer-events: none;
-  box-shadow: none;
+.inc-pop-backdrop { position: fixed; inset: 0; z-index: 100; background: transparent; }
+
+/* Disabled stanje + brisanje u edit modalu */
+.edit-save:disabled { opacity: 0.45; cursor: default; pointer-events: none; box-shadow: none; }
+.edit-del-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px;
+  background: transparent;
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  color: #FF6B6B;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: background .2s ease;
 }
+.edit-del-btn:hover { background: rgba(255, 107, 107, 0.12); }
+
+/* Klikabilni redak u Lista tabu */
+.eitem-click { cursor: pointer; }
 
 /* ── Stats ──────────────────────────────────────────────── */
 .stats {

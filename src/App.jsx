@@ -115,9 +115,12 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [toastFading, setToastFading] = useState(false);
   const [confirmId, setConfirmId] = useState(null);
-  const [incomeSheet, setIncomeSheet] = useState(false);
+  const [incomePop, setIncomePop] = useState(false);
   const [newIncomeAmt, setNewIncomeAmt] = useState("");
   const [newIncomeNote, setNewIncomeNote] = useState("");
+  const [editIncome, setEditIncome] = useState(null);
+  const [editIncAmt, setEditIncAmt] = useState("");
+  const [editIncNote, setEditIncNote] = useState("");
   const [expandedCat, setExpandedCat] = useState(null);
   const [editItem, setEditItem] = useState(null);
   const [activeSlice, setActiveSlice] = useState(null);
@@ -131,6 +134,7 @@ export default function App() {
   const fadeTimer  = useRef(null);
   const persistTimer = useRef(null);
   const skipPersist = useRef(true);
+  const incAmtRef = useRef(null);
 
   // WordPress ubaci window.ftSettings = { nonce, root } (vidi PHP snippet).
   // Ako ga nema (lokalni dev / izvan WP-a), app radi in-memory bez spremanja.
@@ -225,6 +229,11 @@ export default function App() {
     return () => clearTimeout(persistTimer.current);
   }, [incomeEntries, allExpenses, loaded, persist]);
 
+  // Fokus na iznos kad se popover otvori
+  useEffect(() => {
+    if (incomePop && incAmtRef.current) incAmtRef.current.focus();
+  }, [incomePop]);
+
   const handleSave = () => {
     persist(incomeEntries, allExpenses);
     flash("Vaše promjene su uspješno pohranjene", 2500);
@@ -235,7 +244,7 @@ export default function App() {
     if (!val || val <= 0) return;
     if (inc <= 0) {
       flash("Najprije unesite prihod", 2200, "warn");
-      setIncomeSheet(true);
+      setIncomePop(true);
       return;
     }
     const trimmedNote = note.trim();
@@ -254,6 +263,12 @@ export default function App() {
     setConfirmId(null);
   };
 
+  const openIncomePop = () => {
+    setNewIncomeAmt("");
+    setNewIncomeNote("");
+    setIncomePop(true);
+  };
+
   const addIncome = () => {
     const val = parseFloat(newIncomeAmt);
     if (!val || val <= 0) return;
@@ -262,11 +277,29 @@ export default function App() {
     setIncomeEntries(prev => [e, ...prev]);
     setNewIncomeAmt("");
     setNewIncomeNote("");
+    setIncomePop(false); // auto-zatvori nakon dodavanja
     flash("Prihod dodan ✓");
   };
 
   const removeIncome = (id) => {
     setIncomeEntries(prev => prev.filter(e => e.id !== id));
+  };
+
+  const openIncomeEdit = (e) => {
+    setEditIncome(e);
+    setEditIncAmt(String(e.amount));
+    setEditIncNote(e.note || "");
+  };
+
+  const saveIncomeEdit = () => {
+    const val = parseFloat(editIncAmt);
+    if (!val || val <= 0) return;
+    const trimmedNote = editIncNote.trim();
+    setIncomeEntries(prev => prev.map(x => x.id === editIncome.id
+      ? { ...x, amount: val, ...(trimmedNote ? { note: trimmedNote } : { note: undefined }) }
+      : x));
+    setEditIncome(null);
+    flash("Spremljeno ✓");
   };
 
   const openEdit = (e) => {
@@ -336,10 +369,45 @@ export default function App() {
           <div className="inc-lbl">Prihodi</div>
           <div className="inc-right">
             {inc > 0 && <span className="inc-total">{fmt(inc)} €</span>}
-            <button className="inc-add-btn" onClick={() => setIncomeSheet(true)}>+ Dodaj prihod</button>
+            <button
+              className={`inc-add-btn${incomePop ? ' active' : ''}`}
+              onClick={() => (incomePop ? setIncomePop(false) : openIncomePop())}
+            >
+              + Dodaj prihod
+            </button>
+          </div>
+
+          <div className={`inc-pop${incomePop ? ' open' : ''}`}>
+            <div className="inc-pop-row">
+              <span className="inc-pop-sym">€</span>
+              <input
+                ref={incAmtRef}
+                className="inc-pop-amt"
+                type="number"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={newIncomeAmt}
+                onChange={e => setNewIncomeAmt(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addIncome()}
+              />
+            </div>
+            <input
+              className="inc-pop-note"
+              type="text"
+              placeholder="Opis  (npr. Plaća)"
+              value={newIncomeNote}
+              onChange={e => setNewIncomeNote(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addIncome()}
+              maxLength={40}
+            />
+            <button className="inc-pop-btn" onClick={addIncome} disabled={!newIncomeAmt || parseFloat(newIncomeAmt) <= 0}>
+              Dodaj prihod
+            </button>
           </div>
         </div>
       </div>
+
+      {incomePop && <div className="inc-pop-backdrop" onClick={() => setIncomePop(false)} />}
 
       <div className="stats">
         <div className="stat">
@@ -511,31 +579,59 @@ export default function App() {
         )}
 
         {tab === 'lista' && (
-          expenses.length === 0 ? (
+          (monthIncome.length === 0 && expenses.length === 0) ? (
             <div className="empty">
               <div className="empty-e">📝</div>
-              <div className="empty-t">Nema unesenih troškova<br />za ovaj mjesec</div>
+              <div className="empty-t">Nema unosa<br />za ovaj mjesec</div>
             </div>
           ) : (
-            <div className="elist">
-              {expenses.map(e => {
-                const c = CATEGORIES.find(x => x.id === e.category) || CATEGORIES[7];
-                return (
-                  <div key={e.id} className="eitem">
-                    <div className="eico" style={{ background: c.color + '26' }}>
-                      <CategoryIcon id={c.id} size={20} color={c.color} strokeWidth={1.5} />
-                    </div>
-                    <div className="einfo">
-                      <div className="ecat">{c.label}</div>
-                      <div className="edt">{e.date}</div>
-                      {e.note && <div className="enote">{e.note}</div>}
-                    </div>
-                    <div className="eamt">{fmt(e.amount)} €</div>
-                    <button className="edel" onClick={() => setConfirmId(e.id)}>✕</button>
+            <>
+              {monthIncome.length > 0 && (
+                <>
+                  <div className="fl" style={{ marginTop: 2 }}>Prihodi</div>
+                  <div className="elist" style={{ marginBottom: 18 }}>
+                    {monthIncome.map(e => (
+                      <div key={e.id} className="eitem eitem-click" onClick={() => openIncomeEdit(e)}>
+                        <div className="eico" style={{ background: '#52B78826' }}>
+                          <CategoryIcon id="stednja" size={20} color="#52B788" strokeWidth={1.5} />
+                        </div>
+                        <div className="einfo">
+                          <div className="ecat">{e.note || 'Prihod'}</div>
+                          <div className="edt">{e.date}</div>
+                        </div>
+                        <div className="eamt" style={{ color: '#4ADE80' }}>{fmt(e.amount)} €</div>
+                        <button className="edel" onClick={ev => { ev.stopPropagation(); removeIncome(e.id); }} title="Obriši">✕</button>
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
+                </>
+              )}
+
+              {expenses.length > 0 && (
+                <>
+                  <div className="fl">Troškovi</div>
+                  <div className="elist">
+                    {expenses.map(e => {
+                      const c = CATEGORIES.find(x => x.id === e.category) || CATEGORIES[7];
+                      return (
+                        <div key={e.id} className="eitem eitem-click" onClick={() => openEdit(e)}>
+                          <div className="eico" style={{ background: c.color + '26' }}>
+                            <CategoryIcon id={c.id} size={20} color={c.color} strokeWidth={1.5} />
+                          </div>
+                          <div className="einfo">
+                            <div className="ecat">{c.label}</div>
+                            <div className="edt">{e.date}</div>
+                            {e.note && <div className="enote">{e.note}</div>}
+                          </div>
+                          <div className="eamt">{fmt(e.amount)} €</div>
+                          <button className="edel" onClick={ev => { ev.stopPropagation(); setConfirmId(e.id); }}>✕</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </>
           )
         )}
 
@@ -545,24 +641,22 @@ export default function App() {
         <button className="save-btn" onClick={handleSave}>Spremi</button>
       </div>
 
-      {incomeSheet && (
-        <div className="overlay" onClick={() => setIncomeSheet(false)}>
+      {editIncome && (
+        <div className="overlay" onClick={() => setEditIncome(null)}>
           <div className="edit-sheet" onClick={e => e.stopPropagation()}>
             <div className="edit-handle" />
-            <div className="edit-title">Prihodi — {MONTHS[month]} {year}</div>
-
-            <div className="edit-lbl">Novi prihod</div>
+            <div className="edit-title">Uredi prihod</div>
+            <div className="edit-lbl">Iznos</div>
             <div className="edit-amt-row">
               <span className="amt-sym">€</span>
               <input
                 className="amt-inp"
                 type="number"
                 inputMode="decimal"
-                placeholder="0.00"
                 autoFocus
-                value={newIncomeAmt}
-                onChange={e => setNewIncomeAmt(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addIncome()}
+                value={editIncAmt}
+                onChange={e => setEditIncAmt(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveIncomeEdit()}
               />
             </div>
             <div className="edit-note-row">
@@ -571,33 +665,18 @@ export default function App() {
                 className="note-inp"
                 type="text"
                 placeholder="Opis  (npr. Plaća, Honorar…)"
-                value={newIncomeNote}
-                onChange={e => setNewIncomeNote(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addIncome()}
+                value={editIncNote}
+                onChange={e => setEditIncNote(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveIncomeEdit()}
                 maxLength={40}
               />
             </div>
-            <button className="edit-save" onClick={addIncome} disabled={!newIncomeAmt || parseFloat(newIncomeAmt) <= 0}>
-              + Dodaj prihod
+            <button className="edit-save" onClick={saveIncomeEdit} disabled={!editIncAmt || parseFloat(editIncAmt) <= 0}>
+              Spremi izmjene
             </button>
-
-            {monthIncome.length > 0 && (
-              <div className="inc-list">
-                {monthIncome.map(e => (
-                  <div key={e.id} className="inc-item">
-                    <div className="inc-item-info">
-                      <div className="inc-item-amt">{fmt(e.amount)} €</div>
-                      {e.note && <div className="inc-item-note">{e.note}</div>}
-                    </div>
-                    <button className="inc-item-del" onClick={() => removeIncome(e.id)} title="Obriši">✕</button>
-                  </div>
-                ))}
-                <div className="inc-total-row">
-                  <span>Ukupno</span>
-                  <span>{fmt(inc)} €</span>
-                </div>
-              </div>
-            )}
+            <button className="edit-del-btn" onClick={() => { removeIncome(editIncome.id); setEditIncome(null); }}>
+              Obriši prihod
+            </button>
           </div>
         </div>
       )}
