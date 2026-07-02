@@ -107,7 +107,7 @@ export default function App() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth());
   const [year, setYear]   = useState(now.getFullYear());
-  const [income, setIncome] = useState("");
+  const [incomes, setIncomes] = useState({}); // { "M.YYYY": "1500", ... } — prihod PO mjesecu
   const [allExpenses, setAllExpenses] = useState([]);
   const [tab, setTab] = useState("add");
   const [cat, setCat] = useState("hrana");
@@ -133,6 +133,10 @@ export default function App() {
   // WordPress ubaci window.ftSettings = { nonce, root } (vidi PHP snippet).
   // Ako ga nema (lokalni dev / izvan WP-a), app radi in-memory bez spremanja.
   const settings = (typeof window !== "undefined" && window.ftSettings) || null;
+
+  // Prihod je vezan uz TRENUTNO odabrani mjesec (svaki mjesec ima svoj).
+  const monthKey = `${month + 1}.${year}`;
+  const income = incomes[monthKey] || "";
 
   const expenses = allExpenses.filter(e => {
     const parts = e.date.split('.');
@@ -160,13 +164,13 @@ export default function App() {
   };
 
   // ── Backend: per-user učitavanje + autosave preko WordPress REST API-ja ────
-  const persist = useCallback((prihod, entries) => {
+  const persist = useCallback((prihodi, entries) => {
     if (!settings || !settings.root) return; // nema WP-a → preskoči (dev)
     fetch(settings.root + "spremi", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-WP-Nonce": settings.nonce },
       credentials: "same-origin",
-      body: JSON.stringify({ prihod, entries }),
+      body: JSON.stringify({ prihodi, entries }),
     }).catch(() => {});
   }, [settings]);
 
@@ -180,7 +184,12 @@ export default function App() {
       .then(r => r.json())
       .then(d => {
         if (d && typeof d === "object") {
-          setIncome(d.prihod || "");
+          if (d.prihodi && typeof d.prihodi === "object") {
+            setIncomes(d.prihodi);
+          } else if (d.prihod) {
+            // migracija stare GLOBALNE vrijednosti → veže se na trenutni mjesec
+            setIncomes({ [`${now.getMonth() + 1}.${now.getFullYear()}`]: d.prihod });
+          }
           setAllExpenses(Array.isArray(d.entries) ? d.entries : []);
         }
       })
@@ -194,12 +203,12 @@ export default function App() {
     if (!loaded) return;
     if (skipPersist.current) { skipPersist.current = false; return; }
     clearTimeout(persistTimer.current);
-    persistTimer.current = setTimeout(() => persist(income, allExpenses), 700);
+    persistTimer.current = setTimeout(() => persist(incomes, allExpenses), 700);
     return () => clearTimeout(persistTimer.current);
-  }, [income, allExpenses, loaded, persist]);
+  }, [incomes, allExpenses, loaded, persist]);
 
   const handleSave = () => {
-    persist(income, allExpenses);
+    persist(incomes, allExpenses);
     flash("Vaše promjene su uspješno pohranjene", 2500);
   };
 
@@ -212,8 +221,13 @@ export default function App() {
       return;
     }
     const trimmedNote = note.trim();
-    const newDate = new Date();
-    const formattedDate = `${newDate.getDate()}.${newDate.getMonth() + 1}.${newDate.getFullYear()}.`;
+    // Trošak dobiva datum ODABRANOG mjeseca (ne nužno današnjeg). Ako gledaš
+    // trenutni mjesec → današnji dan; inače dan (clampan na zadnji dan mjeseca).
+    const today = new Date();
+    const isCurrentView = month === today.getMonth() && year === today.getFullYear();
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const day = isCurrentView ? today.getDate() : Math.min(today.getDate(), lastDay);
+    const formattedDate = `${day}.${month + 1}.${year}.`;
     const e = { id: Date.now(), category: cat, amount: val, date: formattedDate, ...(trimmedNote && { note: trimmedNote }) };
     const next = [e, ...allExpenses];
     setAllExpenses(next);
@@ -230,7 +244,8 @@ export default function App() {
   };
 
   const saveIncome = (v) => {
-    setIncome(v);
+    // Sprema prihod SAMO za trenutno odabrani mjesec.
+    setIncomes(prev => ({ ...prev, [monthKey]: v }));
   };
 
   const openEdit = (e) => {
