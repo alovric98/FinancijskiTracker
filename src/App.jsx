@@ -193,6 +193,35 @@ export default function App() {
       .catch(() => false);
   }, [settings]);
 
+  // Automatski pokuša ponovno par puta prije nego odustane (prekid interneta,
+  // privremeni server hiccup) — korisnik ne vidi ništa dok god neki pokušaj uspije.
+  const persistWithRetry = useCallback((incEntries, entries, attempt = 0) => {
+    return persist(incEntries, entries).then(ok => {
+      if (ok || attempt >= 2) return ok;
+      return new Promise(resolve => {
+        setTimeout(() => resolve(persistWithRetry(incEntries, entries, attempt + 1)), 1500 * (attempt + 1));
+      });
+    });
+  }, [persist]);
+
+  // Sigurnosni token (X-WP-Nonce) istekne nakon ~12-24h. Dok je app otvoren,
+  // tiho ga osvježavamo puno prije isteka (svakih 10 min) — tako u normalnoj
+  // upotrebi NIKAD ne dođe do isteka, bez obzira koliko dugo tab bio otvoren.
+  useEffect(() => {
+    if (!settings || !settings.root) return;
+    const refreshNonce = () => {
+      fetch(settings.root + "nonce", {
+        headers: { "X-WP-Nonce": settings.nonce },
+        credentials: "same-origin",
+      })
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => { if (d && d.nonce) settings.nonce = d.nonce; })
+        .catch(() => {});
+    };
+    const interval = setInterval(refreshNonce, 10 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [settings]);
+
   // Početno učitavanje korisnikovih podataka (jednom)
   useEffect(() => {
     if (!settings || !settings.root) { setLoaded(true); return; }
@@ -238,12 +267,12 @@ export default function App() {
     if (skipPersist.current) { skipPersist.current = false; return; }
     clearTimeout(persistTimer.current);
     persistTimer.current = setTimeout(() => {
-      persist(incomeEntries, allExpenses).then(ok => {
+      persistWithRetry(incomeEntries, allExpenses).then(ok => {
         if (!ok) flash("Spremanje nije uspjelo — osvježite stranicu", 4000, "warn");
       });
     }, 700);
     return () => clearTimeout(persistTimer.current);
-  }, [incomeEntries, allExpenses, loaded, persist]);
+  }, [incomeEntries, allExpenses, loaded, persistWithRetry]);
 
   // Fokus na iznos kad se popover otvori
   useEffect(() => {
@@ -251,7 +280,7 @@ export default function App() {
   }, [incomePop]);
 
   const handleSave = () => {
-    persist(incomeEntries, allExpenses).then(ok => {
+    persistWithRetry(incomeEntries, allExpenses).then(ok => {
       flash(
         ok ? "Vaše promjene su uspješno pohranjene" : "Spremanje nije uspjelo — osvježite stranicu",
         ok ? 2500 : 4000,
