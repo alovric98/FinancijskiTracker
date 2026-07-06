@@ -177,14 +177,20 @@ export default function App() {
   };
 
   // ── Backend: per-user učitavanje + autosave preko WordPress REST API-ja ────
+  // Vraća true/false — fetch() sam po sebi NE baca grešku na 403/500 (to je
+  // "uspješan" HTTP poziv s lošim statusom), pa MORAMO provjeriti res.ok.
+  // Bez ovoga: istekne li sigurnosni token (X-WP-Nonce, ~12-24h), WordPress
+  // tiho odbije spremanje, a app i dalje misli da je sve spremljeno.
   const persist = useCallback((incEntries, entries) => {
-    if (!settings || !settings.root) return; // nema WP-a → preskoči (dev)
-    fetch(settings.root + "spremi", {
+    if (!settings || !settings.root) return Promise.resolve(true); // dev bez WP-a
+    return fetch(settings.root + "spremi", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-WP-Nonce": settings.nonce },
       credentials: "same-origin",
       body: JSON.stringify({ incomeEntries: incEntries, entries }),
-    }).catch(() => {});
+    })
+      .then(res => res.ok)
+      .catch(() => false);
   }, [settings]);
 
   // Početno učitavanje korisnikovih podataka (jednom)
@@ -194,7 +200,10 @@ export default function App() {
       headers: { "X-WP-Nonce": settings.nonce },
       credentials: "same-origin",
     })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error("Neuspješno učitavanje (status " + r.status + ")");
+        return r.json();
+      })
       .then(d => {
         if (d && typeof d === "object") {
           if (Array.isArray(d.incomeEntries)) {
@@ -215,7 +224,10 @@ export default function App() {
           setAllExpenses(Array.isArray(d.entries) ? d.entries : []);
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        // Ne prebrisuj lokalno stanje na neuspjeh — samo javi grešku.
+        flash("Neuspješno učitavanje podataka — osvježite stranicu", 4500, "warn");
+      })
       .finally(() => setLoaded(true));
   }, [settings]);
 
@@ -225,7 +237,11 @@ export default function App() {
     if (!loaded) return;
     if (skipPersist.current) { skipPersist.current = false; return; }
     clearTimeout(persistTimer.current);
-    persistTimer.current = setTimeout(() => persist(incomeEntries, allExpenses), 700);
+    persistTimer.current = setTimeout(() => {
+      persist(incomeEntries, allExpenses).then(ok => {
+        if (!ok) flash("Spremanje nije uspjelo — osvježite stranicu", 4000, "warn");
+      });
+    }, 700);
     return () => clearTimeout(persistTimer.current);
   }, [incomeEntries, allExpenses, loaded, persist]);
 
@@ -235,8 +251,13 @@ export default function App() {
   }, [incomePop]);
 
   const handleSave = () => {
-    persist(incomeEntries, allExpenses);
-    flash("Vaše promjene su uspješno pohranjene", 2500);
+    persist(incomeEntries, allExpenses).then(ok => {
+      flash(
+        ok ? "Vaše promjene su uspješno pohranjene" : "Spremanje nije uspjelo — osvježite stranicu",
+        ok ? 2500 : 4000,
+        ok ? "success" : "warn"
+      );
+    });
   };
 
   const addExpense = () => {
