@@ -187,6 +187,7 @@ export default function App() {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-WP-Nonce": settings.nonce },
       credentials: "same-origin",
+      cache: "no-store",
       body: JSON.stringify({ incomeEntries: incEntries, entries }),
     })
       .then(res => res.ok)
@@ -210,9 +211,10 @@ export default function App() {
   useEffect(() => {
     if (!settings || !settings.root) return;
     const refreshNonce = () => {
-      fetch(settings.root + "nonce", {
+      fetch(settings.root + "nonce?_=" + Date.now(), {
         headers: { "X-WP-Nonce": settings.nonce },
         credentials: "same-origin",
+        cache: "no-store",
       })
         .then(r => (r.ok ? r.json() : null))
         .then(d => { if (d && d.nonce) settings.nonce = d.nonce; })
@@ -225,9 +227,13 @@ export default function App() {
   // Početno učitavanje korisnikovih podataka (jednom)
   useEffect(() => {
     if (!settings || !settings.root) { setLoaded(true); return; }
-    fetch(settings.root + "podaci", {
+    // cache: 'no-store' + jedinstven ?_= parametar → preglednik/hosting cache
+    // (npr. Opera, Hostinger LiteSpeed) NE smije vratiti stari zamrznuti odgovor
+    // umjesto stvarnog upita serveru (uzrok "0/prazno dok se cache ne obriše").
+    fetch(settings.root + "podaci?_=" + Date.now(), {
       headers: { "X-WP-Nonce": settings.nonce },
       credentials: "same-origin",
+      cache: "no-store",
     })
       .then(r => {
         if (!r.ok) throw new Error("Neuspješno učitavanje (status " + r.status + ")");
