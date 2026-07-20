@@ -1,0 +1,41 @@
+# Lokalno razvojno okruženje za Financijski Tracker (Faza 0).
+# Isključivo za lokalni rad — ništa ovdje ne dira produkciju (wealth-builder.ai).
+# Vjerodajnice ispod su lokalne/placeholder, nemaju veze s produkcijskim hostingom.
+#
+# Upute za korištenje: docs/LOKALNI_SETUP.md
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_lokalno_samo
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress_lokalno_samo
+    volumes:
+      - db_data:/var/lib/mysql
+
+  wordpress:
+    image: wordpress:latest
+    restart: unless-stopped
+    depends_on:
+      - db
+    ports:
+      - "8080:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress_lokalno_samo
+    volumes:
+      - wp_data:/var/www/html/wp-content
+      # Bind-mount lokalno izgrađenog bundlea: `npm run build` prepiše
+      # ./index.js na hostu, a WP ga odmah servira na istoj putanji —
+      # bez ručnog kopiranja. Datoteka već postoji u repou pa mount
+      # radi i prije prvog builda.
+      - ./index.js:/var/www/html/wp-content/uploads/ft-tracker/index.js:ro
+
+volumes:
+  db_data:
+  wp_data:
