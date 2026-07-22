@@ -128,7 +128,18 @@ Refresh stranice sa shortcodeom (kao `test` korisnik) — sada radi protiv
 tvog lokalno izgrađenog `index.js`.
 
 Nakon svake izmjene u `src/`: `npm run build` → refresh stranice u
-pregledniku (nije potreban restart kontejnera).
+pregledniku.
+
+> ⚠️ **Nakon SVAKOG `npm run build` treba i:**
+> ```bash
+> docker compose down && docker compose up -d
+> ```
+> Razlog: `npm run build` ne piše preko postojećeg `index.js`, nego stvara
+> novu datoteku (novi inode) i preimenuje je na `index.js`. Docker-ov
+> bind-mount pojedinačne datoteke (`./index.js:...:ro`) ostaje zakvačen na
+> **stari** inode, pa kontejner nakon builda i dalje servira prijašnju
+> verziju (ili grešku, ovisno o platformi) dok se ne podigne ponovno. Samo
+> refresh preglednika nije dovoljan.
 
 ### Opcija B — Vite dev server (napredno, nije nužno za Fazu 0)
 

@@ -130,6 +130,8 @@ export default function App() {
   const [editNote, setEditNote] = useState("");
   const [toastType, setToastType] = useState("success"); // 'success' | 'warn'
   const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const toastTimer = useRef(null);
   const fadeTimer  = useRef(null);
   const persistTimer = useRef(null);
@@ -224,13 +226,14 @@ export default function App() {
     return () => clearInterval(interval);
   }, [settings]);
 
-  // Početno učitavanje korisnikovih podataka (jednom)
-  useEffect(() => {
-    if (!settings || !settings.root) { setLoaded(true); return; }
+  // Učitavanje korisnikovih podataka — izdvojeno iz efekta u funkciju da je
+  // može pozvati i početni mount i gumb "Pokušaj ponovno" nakon pada (audit 3.1).
+  const loadData = useCallback(() => {
+    if (!settings || !settings.root) { setLoaded(true); return Promise.resolve(); }
     // cache: 'no-store' + jedinstven ?_= parametar → preglednik/hosting cache
     // (npr. Opera, Hostinger LiteSpeed) NE smije vratiti stari zamrznuti odgovor
     // umjesto stvarnog upita serveru (uzrok "0/prazno dok se cache ne obriše").
-    fetch(settings.root + "podaci?_=" + Date.now(), {
+    return fetch(settings.root + "podaci?_=" + Date.now(), {
       headers: { "X-WP-Nonce": settings.nonce },
       credentials: "same-origin",
       cache: "no-store",
@@ -258,13 +261,27 @@ export default function App() {
           }
           setAllExpenses(Array.isArray(d.entries) ? d.entries : []);
         }
+        setLoadFailed(false);
+        setLoaded(true);
       })
       .catch(() => {
-        // Ne prebrisuj lokalno stanje na neuspjeh — samo javi grešku.
-        flash("Neuspješno učitavanje podataka — osvježite stranicu", 4500, "warn");
-      })
-      .finally(() => setLoaded(true));
+        // Ne prebrisuj lokalno stanje na neuspjeh — blokiraj unos i spremanje
+        // umjesto tihog nastavka s praznim stanjem (vidi loadFailed u renderu).
+        setLoadFailed(true);
+      });
   }, [settings]);
+
+  // Početno učitavanje korisnikovih podataka (jednom)
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Gumb "Pokušaj ponovno" u blokiranom stanju — ponovno pokreće loadData().
+  const retryLoad = () => {
+    if (retrying) return;
+    setRetrying(true);
+    loadData().finally(() => setRetrying(false));
+  };
 
   // Autosave (debounce 700ms) — tek NAKON početnog učitavanja, da ne prebriše
   // korisnikove podatke praznim stanjem prije nego stignu s servera.
@@ -404,6 +421,23 @@ export default function App() {
       </div>
     );
   };
+
+  // Blokirano stanje: početno učitavanje nije uspjelo. Cijelo interaktivno
+  // sučelje (unos, uređivanje, brisanje, ručni Spremi) namjerno se ne
+  // renderira — jedini izlaz je uspješan "Pokušaj ponovno" (audit 3.1).
+  if (loadFailed) {
+    return (
+      <div className="root">
+        <div className="blocked">
+          <div className="blocked-e">⚠️</div>
+          <div className="blocked-t">Podaci se nisu mogli učitati.<br />Provjerite internetsku vezu i pokušajte ponovno.</div>
+          <button className="blocked-btn" onClick={retryLoad} disabled={retrying}>
+            {retrying ? "Pokušavam…" : "Pokušaj ponovno"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="root">

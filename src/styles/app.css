@@ -742,6 +742,47 @@ body {
 .empty-e     { font-size: 40px; margin-bottom: 12px; }
 .empty-t     { font-size: 13px; line-height: 1.6; }
 
+/* ── Blocked State (neuspjelo početno učitavanje, audit 3.1) ──────── */
+.blocked {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 28px;
+  min-height: 100vh;
+}
+.blocked-e { font-size: 40px; margin-bottom: 14px; }
+.blocked-t {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ft-color-on-dark-subtle);
+  margin-bottom: 24px;
+  max-width: 280px;
+}
+.blocked-btn {
+  padding: 15px 28px;
+  background: var(--ft-color-accent);
+  color: var(--ft-color-primary);
+  border: none;
+  border-radius: var(--radius-lg);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.blocked-btn:hover  { background: var(--ft-color-accent-hover); }
+.blocked-btn:active { transform: scale(.985); background: var(--ft-color-accent-hover); }
+.blocked-btn:disabled {
+  background: var(--ft-color-surface-2);
+  color: var(--ft-color-on-dark-subtle);
+  cursor: default;
+  pointer-events: none;
+}
+
 /* ── Toast ──────────────────────────────────────────────── */
 .toast {
   position: fixed;
