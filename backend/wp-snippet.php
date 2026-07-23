@@ -2,8 +2,8 @@
 /**
  * Financijski Tracker — backend snippet (WP Code Snippets plugin)
  *
- * Verzija: v1.8 (App bundle: v1.8)
- * Datum: 2026-07-20
+ * Verzija: v1.9 (App bundle: v1.9 — self-hosted, vidi FT_BUNDLE_VER niže)
+ * Datum: 2026-07-22
  *
  * SOURCE OF TRUTH: ova datoteka je izvor istine za backend. Svaka promjena
  * se prvo radi ovdje (commit u repo), tek onda copy-paste u WP admin
@@ -13,10 +13,15 @@
  * NAPOMENA pri copy-pasteu u WP Code Snippets: taj plugin sam dodaje
  * `<?php` omotač oko snippeta, pa se otvorni tag s vrha OVE datoteke NE
  * kopira zajedno s ostatkom koda (dvostruki `<?php` je fatalna greška).
- * Kopira se sve OD `add_action('rest_api_init', ...)` naniže.
+ * Kopira se sve OD `define('FT_BUNDLE_VER', ...)` naniže.
  *
  * Per-user spremanje + gating (WordPress REST)
  */
+
+// Verzija bundlea za cache-busting (?v=...). BUMPAJ ovaj broj pri SVAKOM
+// produkcijskom deployu novog index.js (svaka frontend faza) — inače
+// preglednik/hosting cache može poslužiti stari bundle unatoč uploadu.
+define('FT_BUNDLE_VER', '1.9');
 
 // ── 1. REST rute (samo ulogirani) ──────────────────────────────
 add_action('rest_api_init', function () {
@@ -78,7 +83,9 @@ function ft_spremi_podaci(WP_REST_Request $req) {
 function ft_shortcode() {
     $root   = esc_url_raw(rest_url('financijski-tracker/v1/'));
     $nonce  = wp_create_nonce('wp_rest');
-    $bundle = 'https://rawcdn.githack.com/alovric98/FinancijskiTracker/v1.8/index.js';
+    // Self-hosted (audit 1.1 — githack maknut). content_url() je portabilan:
+    // ista linija radi i lokalno (localhost:8080) i na produkciji.
+    $bundle = content_url('uploads/ft-tracker/index.js') . '?v=' . FT_BUNDLE_VER;
     return '<div id="wb-finance-tracker" data-ft-root="' . esc_attr($root) . '" data-ft-nonce="' . esc_attr($nonce) . '"></div>'
          . '<script type="module" src="' . esc_url($bundle) . '"></script>';
 }
