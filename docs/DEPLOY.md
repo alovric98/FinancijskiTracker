@@ -60,10 +60,17 @@ nove podatke od tada.
    naniže iz `backend/wp-snippet.php` u repou.
    - Code Snippets plugin sam dodaje `<?php` omotač — **NE** kopiraj otvoreni
      `<?php` tag s vrha datoteke (dvostruki `<?php` je fatalna greška).
-3. **Prije snimanja, provjeri:** je li `FT_BUNDLE_VER` bumpan u odnosu na
-   prošli deploy (npr. `'1.8'` → `'1.9'`)? Ako nije bumpan, preglednici i
-   hosting cache mogu i dalje servirati stari bundle unatoč uploadu iz koraka 2.
-4. **Update.** Provjeri da je "Run snippet everywhere" i dalje uključeno.
+3. **Provjeri cijelost lijepljenja prije snimanja** (poznat problem: prvi
+   redak zna otpasti pri copy-pasteu i srušiti stranicu s trackerom dok se
+   ne primijeti i ispravi):
+   - Zalijepljeni sadržaj mora **počinjati** s `define('FT_BUNDLE_VER', ...)`.
+   - Mora **završavati** s `add_shortcode('financijski_tracker', 'ft_shortcode');`.
+   - Ako bilo koji rub nedostaje — obriši sve u editoru i zalijepi ponovno,
+     umjesto da ručno dopisuješ nedostajući redak.
+4. **Provjeri je li `FT_BUNDLE_VER` bumpan** u odnosu na prošli deploy (npr.
+   `'1.8'` → `'1.9'`)? Ako nije bumpan, preglednici i hosting cache mogu i
+   dalje servirati stari bundle unatoč uploadu iz koraka 2.
+5. **Update.** Provjeri da je "Run snippet everywhere" i dalje uključeno.
 
 ---
 

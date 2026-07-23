@@ -28,12 +28,14 @@ SELECT * FROM wp_usermeta WHERE meta_key = 'ft_podaci';
 Ovo su svi trenutni podaci svih korisnika (jedan red po korisniku, `ft_podaci`
 je JSON blob u `meta_value`).
 
-> Od Faze 3 nadalje (kad snippet počne pisati rotirajuće backup ključeve)
-> proširi upit i na njih, radi potpunog snapshotta:
+> Od Faze 3 nadalje snippet piše i rotirajuće backup ključeve
+> (`ft_podaci_bak1..3` + `ft_podaci_bak_ts`) — proširi upit i na njih, radi
+> potpunog snapshotta:
 > ```sql
 > SELECT * FROM wp_usermeta WHERE meta_key = 'ft_podaci' OR meta_key LIKE 'ft_podaci_bak%';
 > ```
-> (Ovi ključevi još ne postoje — ništa se ne događa dok se ne pojave nakon Faze 3.)
+> (Detalji o ovim ključevima i ručnom oporavku iz njih: zadnja sekcija ovog
+> dokumenta, "Oporavak iz ft_podaci_bak verzija".)
 
 ## 3. Provjera broja redaka prije exporta
 
@@ -111,3 +113,70 @@ U hPanelu, za wealth-builder.ai:
 
 Ovo su ista otvorena pitanja iz `docs/AUDIT.md` ("Otvorena pitanja", stavka 2)
 — odgovori ovdje popunjavaju taj nalaz.
+
+## 9. Oporavak iz ft_podaci_bak verzija (od Faze 3)
+
+Od Faze 3, `ft_spremi_podaci()` prije svakog prepisivanja `ft_podaci` sprema
+prethodno stanje u rotirajuće ključeve — **isključivo** kao mreža za ručni
+oporavak. Nijedna REST ruta ih ne vraća klijentu; frontend ne zna da postoje.
+
+- `ft_podaci_bak1` (najnovija), `ft_podaci_bak2`, `ft_podaci_bak3`
+  (najstarija) — svaka je **sirovi** `ft_podaci` JSON, identičnog oblika
+  glavnom ključu (`{"incomeEntries":[...],"entries":[...]}`). Spremne su za
+  izravan copy-paste natrag u `ft_podaci`, bez ikakve obrade.
+- `ft_podaci_bak_ts` — JSON mapa `{"1": <unix timestamp>, "2": ..., "3": ...}`,
+  vrijeme nastanka svake od tri kopije (`0` = ta kopija još ne postoji).
+- Nova verzija nastaje najviše jednom po satu (`FT_BACKUP_THROTTLE` u
+  snippetu) — autosave sprema svakih ~0.7s dok korisnik radi, pa bi rotacija
+  na svako spremanje učinila sve tri kopije jednako (beskorisno) svježima.
+
+### 9.1 Prikaz svih verzija za korisnika
+
+```sql
+-- Pronađi user_id po e-mailu
+SELECT ID, user_email FROM wp_users WHERE user_email = 'korisnik@example.com';
+
+-- Sve ft_podaci verzije (glavna + backup + timestampovi) za taj user_id
+SELECT meta_key, meta_value
+FROM wp_usermeta
+WHERE user_id = <ID>
+  AND (meta_key = 'ft_podaci' OR meta_key LIKE 'ft_podaci_bak%')
+ORDER BY meta_key;
+```
+
+Timestamp iz `ft_podaci_bak_ts` u čitljiv datum (u istom SQL tabu):
+
+```sql
+SELECT FROM_UNIXTIME(1753267890);
+```
+
+### 9.2 Ručni povrat odabrane verzije
+
+**Preporučeno — kroz phpMyAdmin sučelje:**
+1. Pomoću 9.1 odaberi koju verziju vraćaš (obično `ft_podaci_bak1` —
+   najnovija; provjeri `ft_podaci_bak_ts` ako trebaš stariju, `bak2`/`bak3`).
+2. Otvori red `meta_key = 'ft_podaci_bak1'` (ili bak2/bak3), kopiraj **cijeli**
+   sadržaj `meta_value` polja.
+3. Otvori red `meta_key = 'ft_podaci'` za istog korisnika → Edit → zamijeni
+   `meta_value` kopiranim sadržajem → Go.
+
+**Alternativa — jedan SQL upit** (ako je ugodnije):
+
+```sql
+UPDATE wp_usermeta
+SET meta_value = (
+  SELECT meta_value FROM (
+    SELECT meta_value FROM wp_usermeta
+    WHERE user_id = <ID> AND meta_key = 'ft_podaci_bak1'
+  ) AS tmp
+)
+WHERE user_id = <ID> AND meta_key = 'ft_podaci';
+```
+
+(Dvostruki `SELECT` preko privremene tablice je namjeran — MySQL ne dopušta
+izravan `SELECT` iz iste tablice koja se `UPDATE`-a u istom upitu.) Zamijeni
+`bak1` s `bak2`/`bak3` po potrebi.
+
+Podaci u bak verzijama su već prošli sanitizaciju kad su prvi put spremljeni
+— izravan upis u `ft_podaci` je siguran. Nakon povrata, korisnik treba
+refreshati stranicu da vidi vraćeno stanje.
