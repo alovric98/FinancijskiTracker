@@ -132,11 +132,14 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [versionConflict, setVersionConflict] = useState(false); // audit 3.2 — konflikt verzije na spremanju
+  const [reloadingLatest, setReloadingLatest] = useState(false);
   const toastTimer = useRef(null);
   const fadeTimer  = useRef(null);
   const persistTimer = useRef(null);
   const skipPersist = useRef(true);
   const incAmtRef = useRef(null);
+  const dataVersionRef = useRef(null); // null = nepoznato (star/vraćen backend, ili prije prvog loada)
 
   // WordPress ubaci window.ftSettings = { nonce, root } (vidi PHP snippet).
   // Ako ga nema (lokalni dev / izvan WP-a), app radi in-memory bez spremanja.
@@ -179,28 +182,47 @@ export default function App() {
   };
 
   // ── Backend: per-user učitavanje + autosave preko WordPress REST API-ja ────
-  // Vraća true/false — fetch() sam po sebi NE baca grešku na 403/500 (to je
-  // "uspješan" HTTP poziv s lošim statusom), pa MORAMO provjeriti res.ok.
-  // Bez ovoga: istekne li sigurnosni token (X-WP-Nonce, ~12-24h), WordPress
-  // tiho odbije spremanje, a app i dalje misli da je sve spremljeno.
+  // Vraća "ok" / "conflict" / "error" — fetch() sam po sebi NE baca grešku na
+  // 403/500 (to je "uspješan" HTTP poziv s lošim statusom), pa MORAMO provjeriti
+  // res.ok. Bez ovoga: istekne li sigurnosni token (X-WP-Nonce, ~12-24h),
+  // WordPress tiho odbije spremanje, a app i dalje misli da je sve spremljeno.
+  // "conflict" (audit 3.2) se razlikuje od "error" isključivo parsiranjem tijela
+  // odgovora (d.code) — i ft_verzija_zastarjela i ft_sumnjivo_smanjenje su 409.
   const persist = useCallback((incEntries, entries) => {
-    if (!settings || !settings.root) return Promise.resolve(true); // dev bez WP-a
+    if (!settings || !settings.root) return Promise.resolve("ok"); // dev bez WP-a
+    const body = { incomeEntries: incEntries, entries };
+    // Verzija se šalje SAMO ako je poznata — izostavljanje ključa (ne null!),
+    // jer bi stari/vraćen backend inače mogao pogrešno vidjeti namjerno
+    // poslanu verziju tamo gdje klijent zapravo ništa ne zna (audit 3.2).
+    if (dataVersionRef.current !== null) body.version = dataVersionRef.current;
     return fetch(settings.root + "spremi", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-WP-Nonce": settings.nonce },
       credentials: "same-origin",
       cache: "no-store",
-      body: JSON.stringify({ incomeEntries: incEntries, entries }),
+      body: JSON.stringify(body),
     })
-      .then(res => res.ok)
-      .catch(() => false);
+      .then(res => {
+        if (res.ok) {
+          return res.json()
+            .then(d => { if (d && typeof d.version === "number") dataVersionRef.current = d.version; return "ok"; })
+            .catch(() => "ok");
+        }
+        return res.json()
+          .then(d => (d && d.code === "ft_verzija_zastarjela" ? "conflict" : "error"))
+          .catch(() => "error");
+      })
+      .catch(() => "error");
   }, [settings]);
 
   // Automatski pokuša ponovno par puta prije nego odustane (prekid interneta,
   // privremeni server hiccup) — korisnik ne vidi ništa dok god neki pokušaj uspije.
+  // "conflict" se NE retry-a (audit 3.2) — ponavljanje istim zastarjelim payloadom
+  // je besmisleno. "error" (mrežne greške, ft_sumnjivo_smanjenje) i dalje retry-a
+  // nepromijenjeno.
   const persistWithRetry = useCallback((incEntries, entries, attempt = 0) => {
-    return persist(incEntries, entries).then(ok => {
-      if (ok || attempt >= 2) return ok;
+    return persist(incEntries, entries).then(result => {
+      if (result === "ok" || result === "conflict" || attempt >= 2) return result;
       return new Promise(resolve => {
         setTimeout(() => resolve(persistWithRetry(incEntries, entries, attempt + 1)), 1500 * (attempt + 1));
       });
@@ -229,7 +251,7 @@ export default function App() {
   // Učitavanje korisnikovih podataka — izdvojeno iz efekta u funkciju da je
   // može pozvati i početni mount i gumb "Pokušaj ponovno" nakon pada (audit 3.1).
   const loadData = useCallback(() => {
-    if (!settings || !settings.root) { setLoaded(true); return Promise.resolve(); }
+    if (!settings || !settings.root) { setLoaded(true); return Promise.resolve(true); }
     // cache: 'no-store' + jedinstven ?_= parametar → preglednik/hosting cache
     // (npr. Opera, Hostinger LiteSpeed) NE smije vratiti stari zamrznuti odgovor
     // umjesto stvarnog upita serveru (uzrok "0/prazno dok se cache ne obriše").
@@ -260,14 +282,19 @@ export default function App() {
             setIncomeEntries([{ id: Date.now(), amount: parseFloat(d.prihod), date: `1.${now.getMonth() + 1}.${now.getFullYear()}.` }]);
           }
           setAllExpenses(Array.isArray(d.entries) ? d.entries : []);
+          // Faza 4 (audit 3.2): eksplicitni typeof jer je 0 valjana, ali falsy,
+          // vrijednost verzije; nedostatak polja (stari/vraćen backend) → null.
+          dataVersionRef.current = typeof d.version === "number" ? d.version : null;
         }
         setLoadFailed(false);
         setLoaded(true);
+        return true;
       })
       .catch(() => {
         // Ne prebrisuj lokalno stanje na neuspjeh — blokiraj unos i spremanje
         // umjesto tihog nastavka s praznim stanjem (vidi loadFailed u renderu).
         setLoadFailed(true);
+        return false;
       });
   }, [settings]);
 
@@ -283,19 +310,42 @@ export default function App() {
     loadData().finally(() => setRetrying(false));
   };
 
+  // Gumb "Učitaj najnovije podatke" na banneru verzijskog konflikta (audit 3.2).
+  // skipPersist se postavlja PRIJE loadData() poziva, a versionConflict se čisti
+  // tek NAKON što se loadData() razriješi — tako svježe učitano stanje ne pokrene
+  // autosave natrag: dok je versionConflict još true, autosave efekt niže baila
+  // prije nego stigne do skipPersist provjere; kad se versionConflict napokon
+  // ugasi, skipPersist je već postavljen pa se ta jedna prilika samo potroši.
+  const handleLoadLatest = () => {
+    if (reloadingLatest) return;
+    setReloadingLatest(true);
+    skipPersist.current = true;
+    loadData().then(success => {
+      setVersionConflict(false);
+      setReloadingLatest(false);
+      if (success) {
+        flash("Učitani su najnoviji podaci s drugog uređaja — vaše nespremljene izmjene ovdje su odbačene", 4500, "warn");
+      }
+      // ako reload ne uspije, loadFailed preuzima puni blokirani ekran (audit 3.1) —
+      // lokalno stanje nije prebrisano pa poruka o odbačenim izmjenama izostaje.
+    });
+  };
+
   // Autosave (debounce 700ms) — tek NAKON početnog učitavanja, da ne prebriše
   // korisnikove podatke praznim stanjem prije nego stignu s servera.
   useEffect(() => {
     if (!loaded) return;
+    if (versionConflict) return; // spremanje se zaustavlja dok se sukob ne razriješi (audit 3.2)
     if (skipPersist.current) { skipPersist.current = false; return; }
     clearTimeout(persistTimer.current);
     persistTimer.current = setTimeout(() => {
-      persistWithRetry(incomeEntries, allExpenses).then(ok => {
-        if (!ok) flash("Spremanje nije uspjelo — osvježite stranicu", 4000, "warn");
+      persistWithRetry(incomeEntries, allExpenses).then(result => {
+        if (result === "conflict") setVersionConflict(true);
+        else if (result === "error") flash("Spremanje nije uspjelo — osvježite stranicu", 4000, "warn");
       });
     }, 700);
     return () => clearTimeout(persistTimer.current);
-  }, [incomeEntries, allExpenses, loaded, persistWithRetry]);
+  }, [incomeEntries, allExpenses, loaded, versionConflict, persistWithRetry]);
 
   // Fokus na iznos kad se popover otvori
   useEffect(() => {
@@ -303,11 +353,13 @@ export default function App() {
   }, [incomePop]);
 
   const handleSave = () => {
-    persistWithRetry(incomeEntries, allExpenses).then(ok => {
+    if (versionConflict) return;
+    persistWithRetry(incomeEntries, allExpenses).then(result => {
+      if (result === "conflict") { setVersionConflict(true); return; }
       flash(
-        ok ? "Vaše promjene su uspješno pohranjene" : "Spremanje nije uspjelo — osvježite stranicu",
-        ok ? 2500 : 4000,
-        ok ? "success" : "warn"
+        result === "ok" ? "Vaše promjene su uspješno pohranjene" : "Spremanje nije uspjelo — osvježite stranicu",
+        result === "ok" ? 2500 : 4000,
+        result === "ok" ? "success" : "warn"
       );
     });
   };
@@ -498,6 +550,17 @@ export default function App() {
       </div>
 
       {incomePop && <div className="inc-pop-backdrop" onClick={() => setIncomePop(false)} />}
+
+      {versionConflict && (
+        <div className="conflict-banner">
+          <div className="conflict-banner-text">
+            Podaci su promijenjeni na drugom uređaju ili tabu. Vaše nespremljene izmjene ovdje neće biti spremljene dok ne učitate najnovije.
+          </div>
+          <button className="conflict-banner-btn" onClick={handleLoadLatest} disabled={reloadingLatest}>
+            {reloadingLatest ? "Učitavam…" : "Učitaj najnovije podatke"}
+          </button>
+        </div>
+      )}
 
       <div className="stats">
         <div className="stat">
@@ -728,7 +791,7 @@ export default function App() {
       </div>
 
       <div className="save-bar">
-        <button className="save-btn" onClick={handleSave}>Spremi</button>
+        <button className="save-btn" onClick={handleSave} disabled={versionConflict}>Spremi</button>
       </div>
 
       {editIncome && (

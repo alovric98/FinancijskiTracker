@@ -783,6 +783,50 @@ body {
   pointer-events: none;
 }
 
+/* ── Version Conflict Banner (audit 3.2) ───────────────────────── */
+.conflict-banner {
+  position: sticky;
+  top: 0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 20px 12px;
+  padding: 14px 16px;
+  background: rgba(246, 199, 30, 0.14);
+  border: 1px solid rgba(246, 199, 30, 0.4);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.conflict-banner-text {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ft-color-on-dark);
+}
+.conflict-banner-btn {
+  align-self: flex-start;
+  padding: 9px 16px;
+  background: var(--ft-color-accent);
+  color: var(--ft-color-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.conflict-banner-btn:hover  { background: var(--ft-color-accent-hover); }
+.conflict-banner-btn:active { transform: scale(.985); }
+.conflict-banner-btn:disabled {
+  background: var(--ft-color-surface-2);
+  color: var(--ft-color-on-dark-subtle);
+  cursor: default;
+  pointer-events: none;
+}
+
 /* ── Toast ──────────────────────────────────────────────── */
 .toast {
   position: fixed;
@@ -1013,6 +1057,13 @@ body {
 }
 .save-btn:hover  { background: var(--ft-color-accent-hover); box-shadow: 0 6px 32px rgba(246, 199, 30, 0.45); }
 .save-btn:active { transform: scale(.985); }
+.save-btn:disabled {
+  background: var(--ft-color-surface-2);
+  color: var(--ft-color-on-dark-subtle);
+  box-shadow: none;
+  cursor: default;
+  pointer-events: none;
+}
 
 /* ── Responsive ─────────────────────────────────────────── */
 @media (max-height: 680px) {

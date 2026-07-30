@@ -2,8 +2,8 @@
 /**
  * Financijski Tracker — backend snippet (WP Code Snippets plugin)
  *
- * Verzija: v1.9 (App bundle: v1.9 — self-hosted, vidi FT_BUNDLE_VER niže)
- * Datum: 2026-07-23
+ * Verzija: v2.0 (App bundle: v2.0 — self-hosted, vidi FT_BUNDLE_VER niže)
+ * Datum: 2026-07-25
  *
  * SOURCE OF TRUTH: ova datoteka je izvor istine za backend. Svaka promjena
  * se prvo radi ovdje (commit u repo), tek onda copy-paste u WP admin
@@ -21,7 +21,7 @@
 // Verzija bundlea za cache-busting (?v=...). BUMPAJ ovaj broj pri SVAKOM
 // produkcijskom deployu novog index.js (svaka frontend faza) — inače
 // preglednik/hosting cache može poslužiti stari bundle unatoč uploadu.
-define('FT_BUNDLE_VER', '1.9');
+define('FT_BUNDLE_VER', '2.0');
 
 // Minimalni razmak između dvije backup rotacije po korisniku (audit 1.2).
 // Autosave sprema svakih ~0.7s — bez ovog praga sve tri bak verzije bi
@@ -48,9 +48,13 @@ add_action('rest_api_init', function () {
 });
 
 function ft_get_podaci() {
-    $raw  = get_user_meta(get_current_user_id(), 'ft_podaci', true);
+    $user_id = get_current_user_id();
+    $raw  = get_user_meta($user_id, 'ft_podaci', true);
     $data = $raw ? json_decode($raw, true) : null;
     if (!is_array($data)) $data = array();
+    // Faza 4 (audit 3.2): verzijski brojač za detekciju konflikta dva uređaja.
+    // Stari bundle (prije Faze 4) ovaj dodatni ključ jednostavno ignorira.
+    $data['version'] = (int) get_user_meta($user_id, 'ft_podaci_ver', true); // '' → 0
     return rest_ensure_response($data);
 }
 
@@ -141,6 +145,30 @@ function ft_spremi_podaci(WP_REST_Request $req) {
     $existing_raw   = get_user_meta($user_id, 'ft_podaci', true);
     $existing       = $existing_raw ? json_decode($existing_raw, true) : array();
     $existing_total = ft_ukupno_unosa($existing);
+    $current_ver    = (int) get_user_meta($user_id, 'ft_podaci_ver', true); // '' → 0
+
+    // Zaštita od last-write-wins kod dva istovremeno otvorena taba/uređaja (audit 3.2).
+    // array_key_exists (ne isset!) jer 0 je valjana vrijednost verzije — mora se
+    // razlikovati "stari bundle uopće nije poslao version" (preskoči provjeru —
+    // tranzicijsko razdoblje dok su stari i novi bundle istovremeno u prometu) od
+    // "novi bundle je namjerno poslao version: 0" (provjeri kao svaku drugu vrijednost).
+    // POZNATO OGRANIČENJE: čitanje trenutne verzije, provjera i zapis niže nisu
+    // atomarni (read → check → write) — dva zahtjeva koja gotovo istovremeno pročitaju
+    // istu (staru) verziju teoretski mogu oba proći ovu provjeru prije nego ijedan
+    // stigne zapisati novu (prozor od par ms). Drastično smanjuje, ne uklanja potpuno,
+    // last-write-wins scenarij — prihvatljivo poboljšanje u odnosu na današnje
+    // bezuvjetno prepisivanje. Puno rješenje (atomski uvjetni upit / per-unos model)
+    // izvan je opsega ove faze.
+    if (is_array($body) && array_key_exists('version', $body)) {
+        $client_ver = (int) $body['version'];
+        if ($client_ver !== $current_ver) {
+            return new WP_Error(
+                'ft_verzija_zastarjela',
+                'Spremanje odbijeno: podaci su u međuvremenu promijenjeni na drugom uređaju ili tabu.',
+                array('status' => 409, 'current_version' => $current_ver)
+            );
+        }
+    }
 
     $income    = ft_sanitize_list(isset($body['incomeEntries']) ? $body['incomeEntries'] : array(), false);
     $entries   = ft_sanitize_list(isset($body['entries']) ? $body['entries'] : array(), true);
@@ -160,7 +188,10 @@ function ft_spremi_podaci(WP_REST_Request $req) {
         'incomeEntries' => $income,
         'entries'       => $entries,
     )));
-    return rest_ensure_response(array('success' => true));
+    $new_ver = $current_ver + 1;
+    update_user_meta($user_id, 'ft_podaci_ver', $new_ver);
+
+    return rest_ensure_response(array('success' => true, 'version' => $new_ver));
 }
 
 // ── 2. Shortcode [financijski_tracker] ─────────────────────────
