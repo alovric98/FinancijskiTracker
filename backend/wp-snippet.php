@@ -195,13 +195,38 @@ function ft_spremi_podaci(WP_REST_Request $req) {
 }
 
 // ── 2. Shortcode [financijski_tracker] ─────────────────────────
+
+// Zajednički bundle URL za sve shortcodeove (produkcijski i demo) — jedno
+// mjesto istine za putanju i cache-busting verziju, da se ne duplicira.
+// Self-hosted (audit 1.1 — githack maknut). content_url() je portabilan:
+// ista linija radi i lokalno (localhost:8080) i na produkciji.
+function ft_bundle_url() {
+    return content_url('uploads/ft-tracker/index.js') . '?v=' . FT_BUNDLE_VER;
+}
+
 function ft_shortcode() {
     $root   = esc_url_raw(rest_url('financijski-tracker/v1/'));
     $nonce  = wp_create_nonce('wp_rest');
-    // Self-hosted (audit 1.1 — githack maknut). content_url() je portabilan:
-    // ista linija radi i lokalno (localhost:8080) i na produkciji.
-    $bundle = content_url('uploads/ft-tracker/index.js') . '?v=' . FT_BUNDLE_VER;
+    $bundle = ft_bundle_url();
     return '<div id="wb-finance-tracker" data-ft-root="' . esc_attr($root) . '" data-ft-nonce="' . esc_attr($nonce) . '"></div>'
          . '<script type="module" src="' . esc_url($bundle) . '"></script>';
 }
 add_shortcode('financijski_tracker', 'ft_shortcode');
+
+// ── 3. Shortcode [financijski_tracker_demo] — javni demo ───────
+// Isti mount div i isti bundle kao gore, ali BEZ data-ft-root i
+// data-ft-nonce. Bez tih atributa main.jsx ne postavlja window.ftSettings,
+// pa App radi potpuno in-memory: nula poziva na REST rute, unosi žive samo
+// dok je stranica otvorena i nestaju na refresh/odlazak.
+// Namjerno: nema registracije, nema spremanja (eksplicitan zahtjev klijenta).
+// Bundle je nepromijenjen — FT_BUNDLE_VER se za ovu izmjenu NE bumpa.
+// Napomena o demo verziji NIJE ovdje nego na javnoj stranici (Elementor,
+// iznad iframea) — zahtjev klijenta: alat ostaje čist, tekst je izvan njega.
+// Vanjski omotač centrira demo neovisno o Elementor postavkama containera.
+function ft_shortcode_demo() {
+    return '<div style="max-width:560px;margin:0 auto;">'
+         . '<div id="wb-finance-tracker"></div>'
+         . '<script type="module" src="' . esc_url(ft_bundle_url()) . '"></script>'
+         . '</div>';
+}
+add_shortcode('financijski_tracker_demo', 'ft_shortcode_demo');
