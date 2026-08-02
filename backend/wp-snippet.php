@@ -204,12 +204,32 @@ function ft_bundle_url() {
     return content_url('uploads/ft-tracker/index.js') . '?v=' . FT_BUNDLE_VER;
 }
 
+// Auto-visina iframea. Obje stranice s appom (/app-troskovi/ i
+// /app-troskovi-demo/) učitavaju se kroz iframe s iste domene, pa skript
+// IZNUTRA smije podesiti visinu samog iframe elementa (window.frameElement).
+// Posljedica: nema scrolla unutar alata — scrolla se cijela stranica.
+// Ako stranica nije u iframeu (izravan otvor), skript ne radi ništa.
+// min-height:0 poništava .root { min-height:100vh } iz app.css — bez toga
+// bi iframe mogao samo rasti, nikad se smanjiti pri prelasku na kraći tab.
+function ft_autoheight() {
+    return '<style>#wb-finance-tracker .root{min-height:0}body{margin:0}</style>'
+         . '<script>(function(){'
+         . 'var fe=window.frameElement; if(!fe) return;'
+         . 'fe.setAttribute("scrolling","no");'
+         . 'var fit=function(){var h=document.body.scrollHeight; if(h>0) fe.style.height=h+"px";};'
+         . 'if(window.ResizeObserver){new ResizeObserver(fit).observe(document.body);}'
+         . 'window.addEventListener("load",fit);'
+         . 'setTimeout(fit,300); setTimeout(fit,1200);'
+         . '})();</script>';
+}
+
 function ft_shortcode() {
     $root   = esc_url_raw(rest_url('financijski-tracker/v1/'));
     $nonce  = wp_create_nonce('wp_rest');
     $bundle = ft_bundle_url();
     return '<div id="wb-finance-tracker" data-ft-root="' . esc_attr($root) . '" data-ft-nonce="' . esc_attr($nonce) . '"></div>'
-         . '<script type="module" src="' . esc_url($bundle) . '"></script>';
+         . '<script type="module" src="' . esc_url($bundle) . '"></script>'
+         . ft_autoheight();
 }
 add_shortcode('financijski_tracker', 'ft_shortcode');
 
@@ -220,13 +240,13 @@ add_shortcode('financijski_tracker', 'ft_shortcode');
 // dok je stranica otvorena i nestaju na refresh/odlazak.
 // Namjerno: nema registracije, nema spremanja (eksplicitan zahtjev klijenta).
 // Bundle je nepromijenjen — FT_BUNDLE_VER se za ovu izmjenu NE bumpa.
-// Napomena o demo verziji NIJE ovdje nego na javnoj stranici (Elementor,
-// iznad iframea) — zahtjev klijenta: alat ostaje čist, tekst je izvan njega.
+// Bez ikakvog natpisa o demo verziji unutar alata — zahtjev klijenta.
 // Vanjski omotač centrira demo neovisno o Elementor postavkama containera.
 function ft_shortcode_demo() {
     return '<div style="max-width:560px;margin:0 auto;">'
          . '<div id="wb-finance-tracker"></div>'
          . '<script type="module" src="' . esc_url(ft_bundle_url()) . '"></script>'
-         . '</div>';
+         . '</div>'
+         . ft_autoheight();
 }
 add_shortcode('financijski_tracker_demo', 'ft_shortcode_demo');
