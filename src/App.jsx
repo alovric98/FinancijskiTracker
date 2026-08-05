@@ -138,6 +138,7 @@ export default function App() {
   const fadeTimer  = useRef(null);
   const persistTimer = useRef(null);
   const skipPersist = useRef(true);
+  const pendingAddConfirmRef = useRef(false); // true = sljedeći uspješni autosave dolazi od "Dodaj trošak" (audit 3.1 istinita poruka)
   const incAmtRef = useRef(null);
   const dataVersionRef = useRef(null); // null = nepoznato (star/vraćen backend, ili prije prvog loada)
 
@@ -339,9 +340,17 @@ export default function App() {
     if (skipPersist.current) { skipPersist.current = false; return; }
     clearTimeout(persistTimer.current);
     persistTimer.current = setTimeout(() => {
+      // Flag se troši JEDNOM po ciklusu, bez obzira na ishod — poruka o
+      // pohrani se veže isključivo za autosave koji slijedi baš "Dodaj
+      // trošak", ne na svaki naredni autosave (npr. zbog uređivanja).
+      const confirmAdd = pendingAddConfirmRef.current;
+      pendingAddConfirmRef.current = false;
       persistWithRetry(incomeEntries, allExpenses).then(result => {
         if (result === "conflict") setVersionConflict(true);
         else if (result === "error") flash("Spremanje nije uspjelo — osvježite stranicu", 4000, "warn");
+        else if (result === "ok" && confirmAdd && settings && settings.root) {
+          flash("Vaše promjene su uspješno pohranjene", 2500, "success");
+        }
       });
     }, 700);
     return () => clearTimeout(persistTimer.current);
@@ -378,7 +387,11 @@ export default function App() {
     setAllExpenses(next);
     setAmount("");
     setNote("");
-    flash("Dodano ✓");
+    if (settings && settings.root) {
+      pendingAddConfirmRef.current = true; // istinita potvrda stiže nakon autosavea
+    } else {
+      flash("Trošak dodan ✓"); // demo: nema backenda, druga poruka nikad ne stiže
+    }
     setTab("pregled");
   };
 
@@ -527,6 +540,7 @@ export default function App() {
                 className="inc-pop-amt"
                 type="number"
                 inputMode="decimal"
+                onWheel={e => e.target.blur()}
                 placeholder="0.00"
                 value={newIncomeAmt}
                 onChange={e => setNewIncomeAmt(e.target.value)}
@@ -595,20 +609,7 @@ export default function App() {
 
         {tab === 'add' && (
           <>
-            <div className="fl">Kategorija</div>
-            <div className="cat-grid">
-              {CATEGORIES.map(c => (
-                <button key={c.id} className={`cbt ${cat === c.id ? 'sel' : ''}`} onClick={() => setCat(c.id)}>
-                  <CategoryIcon
-                    id={c.id}
-                    size={22}
-                    color={cat === c.id ? 'var(--ft-color-primary)' : 'var(--ft-color-accent)'}
-                    strokeWidth={1.5}
-                  />
-                  <span className="cbt-lbl">{c.label}</span>
-                </button>
-              ))}
-            </div>
+            <div className="add-title">Dodajte novi trošak</div>
             <div className="fl">Iznos</div>
             <div className="amt-row">
               <span className="amt-sym">€</span>
@@ -616,6 +617,7 @@ export default function App() {
                 className="amt-inp"
                 type="number"
                 inputMode="decimal"
+                onWheel={e => e.target.blur()}
                 placeholder="0.00"
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
@@ -633,6 +635,20 @@ export default function App() {
                 onKeyDown={e => e.key === 'Enter' && addExpense()}
                 maxLength={80}
               />
+            </div>
+            <div className="fl">Kategorija</div>
+            <div className="cat-grid">
+              {CATEGORIES.map(c => (
+                <button key={c.id} className={`cbt ${cat === c.id ? 'sel' : ''}`} onClick={() => setCat(c.id)}>
+                  <CategoryIcon
+                    id={c.id}
+                    size={18}
+                    color={cat === c.id ? 'var(--ft-color-primary)' : 'var(--ft-color-accent)'}
+                    strokeWidth={1.5}
+                  />
+                  <span className="cbt-lbl">{c.label}</span>
+                </button>
+              ))}
             </div>
             <button className="add-btn" onClick={addExpense} disabled={!amount || parseFloat(amount) <= 0}>
               Dodaj trošak
@@ -806,6 +822,7 @@ export default function App() {
                 className="amt-inp"
                 type="number"
                 inputMode="decimal"
+                onWheel={e => e.target.blur()}
                 autoFocus
                 value={editIncAmt}
                 onChange={e => setEditIncAmt(e.target.value)}
@@ -875,6 +892,7 @@ export default function App() {
                 className="amt-inp"
                 type="number"
                 inputMode="decimal"
+                onWheel={e => e.target.blur()}
                 autoFocus
                 value={editAmt}
                 onChange={e => setEditAmt(e.target.value)}

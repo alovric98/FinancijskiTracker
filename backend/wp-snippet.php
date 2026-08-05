@@ -21,7 +21,7 @@
 // Verzija bundlea za cache-busting (?v=...). BUMPAJ ovaj broj pri SVAKOM
 // produkcijskom deployu novog index.js (svaka frontend faza) — inače
 // preglednik/hosting cache može poslužiti stari bundle unatoč uploadu.
-define('FT_BUNDLE_VER', '2.0');
+define('FT_BUNDLE_VER', '2.1');
 
 // Minimalni razmak između dvije backup rotacije po korisniku (audit 1.2).
 // Autosave sprema svakih ~0.7s — bez ovog praga sve tri bak verzije bi
@@ -211,12 +211,24 @@ function ft_bundle_url() {
 // Ako stranica nije u iframeu (izravan otvor), skript ne radi ništa.
 // min-height:0 poništava .root { min-height:100vh } iz app.css — bez toga
 // bi iframe mogao samo rasti, nikad se smanjiti pri prelasku na kraći tab.
+// !important je OBAVEZAN: vite.config.js (plugin forceImportant) pri buildu
+// stavlja !important na svaku deklaraciju, pa i na min-height:100vh, a CSS
+// se ubrizgava iz JS-a NAKON ovog stila. Bez !important override gubi, .root
+// ostaje 100vh (= visina iframea) i mjerenje ulazi u beskonačnu petlju rasta.
+// Specifičnost #wb-finance-tracker .root nadjačava .root i kad su oba !important.
+// Dodatne zaštite u skripti: prag od 2px protiv titranja i gornja granica
+// visine — i da override ikad opet padne, petlja se ne može razbježati.
 function ft_autoheight() {
-    return '<style>#wb-finance-tracker .root{min-height:0}body{margin:0}</style>'
+    return '<style>#wb-finance-tracker .root{min-height:0 !important}body{margin:0}</style>'
          . '<script>(function(){'
          . 'var fe=window.frameElement; if(!fe) return;'
          . 'fe.setAttribute("scrolling","no");'
-         . 'var fit=function(){var h=document.body.scrollHeight; if(h>0) fe.style.height=h+"px";};'
+         . 'var last=0;'
+         . 'var fit=function(){'
+         . 'var h=document.body.scrollHeight;'
+         . 'if(h<=0||h>6000) return;'
+         . 'if(Math.abs(h-last)<2) return;'
+         . 'last=h; fe.style.height=h+"px";};'
          . 'if(window.ResizeObserver){new ResizeObserver(fit).observe(document.body);}'
          . 'window.addEventListener("load",fit);'
          . 'setTimeout(fit,300); setTimeout(fit,1200);'
@@ -239,7 +251,8 @@ add_shortcode('financijski_tracker', 'ft_shortcode');
 // pa App radi potpuno in-memory: nula poziva na REST rute, unosi žive samo
 // dok je stranica otvorena i nestaju na refresh/odlazak.
 // Namjerno: nema registracije, nema spremanja (eksplicitan zahtjev klijenta).
-// Bundle je nepromijenjen — FT_BUNDLE_VER se za ovu izmjenu NE bumpa.
+// Demo i pravi tracker dijele isti bundle — svaka promjena u src/ mijenja
+// sučelje na oba mjesta i traži bump FT_BUNDLE_VER pri deployu.
 // Bez ikakvog natpisa o demo verziji unutar alata — zahtjev klijenta.
 // Vanjski omotač centrira demo neovisno o Elementor postavkama containera.
 function ft_shortcode_demo() {
