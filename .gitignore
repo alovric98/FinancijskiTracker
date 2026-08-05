@@ -6,3 +6,11 @@ dist
 # stari buildovi (novi bundle je index.js)
 index-*.js
 index-v2-final.js
+
+# poslovni dokumenti ne idu u repo
+*.docx
+*.pdf
+
+# poslovni dokumenti ne idu u repo
+*.docx
+*.pdf
