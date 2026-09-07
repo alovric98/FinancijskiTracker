@@ -145,9 +145,56 @@ Tablica `wp_usermeta`, po korisniku:
 | `ft_podaci_bak2` | sigurnosna kopija, starija |
 | `ft_podaci_bak3` | sigurnosna kopija, najstarija |
 | `ft_podaci_bak_ts` | vremena nastanka triju kopija |
+| `ft_last_saved` | unix timestamp zadnjeg uspješnog spremanja (Faza 10) |
+| `ft_aktivnih_dana` | broj različitih dana s barem jednim spremanjem (Faza 10) |
+| `ft_broj_akcija` | kumulativan broj spremanja koja su stvarno promijenila sadržaj — nikad se ne smanjuje (Faza 10) |
+| `ft_last_checked_at` | datum (Ymd) zadnje obrade u cron seriji (Faza 10, interno) |
+| `ft_last_sent_at` | unix timestamp zadnjeg uspješnog slanja na Zapier (Faza 10) |
+| `ft_last_sent_snapshot` | zadnje poslane metrike, za detekciju "bez promjene" (Faza 10, interno) |
 
 Kopije se rotiraju automatski prije svakog prepisivanja, najviše jednom po
 satu po korisniku. Postupak izrade i povrata: `BACKUP.md`.
+
+Tablica `wp_options`:
+
+| Ključ | Sadržaj |
+|---|---|
+| `ft_zapier_webhook_url` | Zapier Catch Hook URL — postavlja se u WP admin → Settings → **FT Aktivnost**, nikad u kodu |
+| `ft_cron_last_summary` | sažetak zadnjeg satnog prolaza praćenja aktivnosti, prikazan na istoj admin stranici |
+
+Brojači iz Faze 10 kreću od nule za sve postojeće korisnike u trenutku
+uvođenja koda — retroaktivne brojke (npr. broj akcija prije tog trenutka)
+se ne popunjavaju unatrag.
+
+---
+
+## 7a. Praćenje aktivnosti (Faza 10) — pravi cron na hostingu
+
+WP-Cron nije pravi cron: događaji se okidaju tek kad netko posjeti bilo
+koju stranicu na sajtu, pa dnevni/satni posao zna preskočiti period bez
+prometa (npr. noć). Zato je za pouzdano pokrivanje svih korisnika svaki
+dan potreban pravi sistemski cron:
+
+1. **Hostinger hPanel → Advanced → Cron Jobs** → dodati zadatak koji se
+   izvršava svakih ~5 minuta i poziva:
+   ```
+   wget -q -O /dev/null 'https://wealth-builder.ai/wp-cron.php?doing_wp_cron'
+   ```
+   (ili ekvivalentno s `curl -s`, ovisno što hPanel nudi).
+2. U `wp-config.php` dodati, **prije** retka `/* That's all, stop editing! */`:
+   ```php
+   define('DISABLE_WP_CRON', true);
+   ```
+   Ovim se gasi WP-ov ugrađeni pseudo-cron (koji bi se inače pokušao
+   okinuti na svaki page-load i usporavao promet), a posao preuzima pravi
+   cron iz koraka 1.
+3. Provjera: WP admin → Settings → **FT Aktivnost** prikazuje "Zadnji
+   prolaz" sa svježim vremenom koje se pomiče otprilike svaki sat, bez
+   ikoga tko ručno posjećuje admin.
+
+Pregled po korisniku (zadnja aktivnost, aktivnih dana, broj akcija,
+trenutni broj unosa, aktivnih mjeseci, status) i ručno pokretanje provjere
+nalaze se na istoj stranici: **WP admin → Settings → FT Aktivnost**.
 
 ---
 
