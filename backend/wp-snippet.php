@@ -413,8 +413,8 @@ function ft_izracunaj_metrike($user_id) {
         'total_income_entries' => ft_broj_prihoda($data),
         'entries_last_24h'     => ft_troskovi_danas($data),
         'active_months'        => ft_ukupno_mjeseci($data),
-        'aktivnih_dana'        => (int) get_user_meta($user_id, 'ft_aktivnih_dana', true),
-        'broj_akcija'          => (int) get_user_meta($user_id, 'ft_broj_akcija', true),
+        'active_days'          => (int) get_user_meta($user_id, 'ft_aktivnih_dana', true),
+        'total_actions'        => (int) get_user_meta($user_id, 'ft_broj_akcija', true),
         'last_saved_at'        => $last_saved > 0 ? gmdate('c', $last_saved) : null,
         'status'               => $neaktivan ? 'neaktivan' : 'aktivan',
     );
@@ -569,8 +569,8 @@ function ft_admin_stranica() {
     foreach ($redovi as $m) {
         echo '<tr><td>' . esc_html($m['email']) . '</td>'
            . '<td>' . esc_html($m['last_saved_at'] ? wp_date('d.m.Y H:i', strtotime($m['last_saved_at'])) : '—') . '</td>'
-           . '<td>' . (int) $m['aktivnih_dana'] . '</td>'
-           . '<td>' . (int) $m['broj_akcija'] . '</td>'
+           . '<td>' . (int) $m['active_days'] . '</td>'
+           . '<td>' . (int) $m['total_actions'] . '</td>'
            . '<td>' . ((int) $m['total_entries'] + (int) $m['total_income_entries']) . '</td>'
            . '<td>' . (int) $m['active_months'] . '</td>'
            . '<td>' . esc_html($m['status']) . '</td></tr>';
